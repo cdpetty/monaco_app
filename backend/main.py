@@ -402,6 +402,9 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
                     "avg_acquired_companies": result.get("Acquired Companies", 0),
                     "total_value_invested": result.get("fund_size", 0),
                     "total_value_returned": result.get("total_value_acquired", 0) + result.get("total_value_alive", 0),
+                    "fund_size": result.get("fund_size", 0),
+                    "avg_primary_invested": result.get("avg_primary_invested", 0),
+                    "avg_follow_on_invested": result.get("avg_follow_on_invested", 0),
                 }
 
                 all_results.append({

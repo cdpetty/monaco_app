@@ -578,11 +578,21 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
   const hasData = fundData.length > 0;
   const allMax = hasData ? Math.max(...fundData.map((d) => d.p95)) : 10;
   const { ticks, axisMax } = generateTicks(allMax * 1.1);
-  const ROW_HEIGHT = 56;
-  const LEFT_LABEL = 70;
-  const RIGHT_PAD = 16;
-  const TOP_PAD = 36;
-  const BOTTOM_PAD = 28;
+
+  const PAD = 40;
+  const VW = 700;
+  const VH = 700;
+  const LEFT_PAD = PAD;
+  const RIGHT_PAD = PAD;
+  const TOP_PAD = PAD;
+  const BOTTOM_LABEL = PAD;
+  const LEGEND_H = 24;
+  const chartTop = TOP_PAD + LEGEND_H;
+  const chartBottom = VH - BOTTOM_LABEL;
+  const chartH = chartBottom - chartTop;
+  const colWidth = fundData.length > 0 ? (VW - LEFT_PAD - RIGHT_PAD) / fundData.length : VW;
+
+  const toY = (val) => chartBottom - (chartH * val) / axisMax;
 
   return (
     <div style={{ border: '1px solid #ffffff', position: 'relative', display: 'flex', flexDirection: 'column', gridRow: '1 / -1' }}>
@@ -599,27 +609,27 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
           <svg
             width="100%"
             height="100%"
-            viewBox={`0 0 600 ${TOP_PAD + fundData.length * ROW_HEIGHT + BOTTOM_PAD}`}
+            viewBox={`0 0 ${VW} ${VH}`}
             preserveAspectRatio="xMidYMid meet"
-            style={{ display: 'block' }}
+            style={{ display: 'block', width: '100%', height: '100%' }}
           >
-            {/* Tick grid lines + labels */}
+            {/* Y-axis tick grid lines + labels */}
             {ticks.map((tick) => {
-              const x = LEFT_LABEL + ((600 - LEFT_LABEL - RIGHT_PAD) * tick) / axisMax;
+              const y = toY(tick);
               return (
                 <g key={tick}>
                   <line
-                    x1={x} y1={TOP_PAD - 4}
-                    x2={x} y2={TOP_PAD + fundData.length * ROW_HEIGHT}
-                    stroke="rgba(255,255,255,0.1)" strokeWidth="1"
+                    x1={LEFT_PAD} y1={y}
+                    x2={VW - RIGHT_PAD} y2={y}
+                    stroke="rgba(255,255,255,0.08)" strokeWidth="1"
                   />
                   <text
-                    x={x}
-                    y={TOP_PAD + fundData.length * ROW_HEIGHT + 16}
+                    x={LEFT_PAD - 8}
+                    y={y + 3}
                     fill={DIM}
                     fontFamily={MONO}
                     fontSize="9"
-                    textAnchor="middle"
+                    textAnchor="end"
                   >
                     {tick}x
                   </text>
@@ -630,14 +640,14 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
             {/* Percentile legend at top */}
             <g>
               {PERCENTILE_KEYS.map((p, i) => {
-                const lx = LEFT_LABEL + i * 55;
+                const lx = LEFT_PAD + i * 60;
                 const isMedian = p.key === 'median_moic';
                 const dotColor = p.color || '#ffffff';
                 return (
                   <g key={p.key}>
                     <circle
                       cx={lx}
-                      cy={TOP_PAD - 18}
+                      cy={TOP_PAD + 6}
                       r={isMedian ? 5 : 3.5}
                       fill={p.filled ? dotColor : 'none'}
                       stroke={dotColor}
@@ -645,10 +655,10 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
                     />
                     <text
                       x={lx + 10}
-                      y={TOP_PAD - 14}
+                      y={TOP_PAD + 10}
                       fill={p.color || DIM}
                       fontFamily={MONO}
-                      fontSize="8"
+                      fontSize="9"
                     >
                       {p.label}
                     </text>
@@ -657,10 +667,9 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
               })}
             </g>
 
-            {/* Fund rows */}
+            {/* Fund columns */}
             {fundData.map((fund, fi) => {
-              const cy = TOP_PAD + fi * ROW_HEIGHT + ROW_HEIGHT / 2;
-              const toX = (val) => LEFT_LABEL + ((600 - LEFT_LABEL - RIGHT_PAD) * val) / axisMax;
+              const cx = LEFT_PAD + fi * colWidth + colWidth / 2;
               const c = fund.color;
               const isSelected = fund.id === activeFundId;
 
@@ -674,44 +683,45 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
 
               return (
                 <g key={fund.id} onClick={() => onSelectFund(fund.id)} style={{ cursor: 'pointer' }}>
-                  {/* Hit area / selection highlight */}
+                  {/* Hit area */}
                   <rect
-                    x={0}
-                    y={TOP_PAD + fi * ROW_HEIGHT}
-                    width={600}
-                    height={ROW_HEIGHT}
-                    fill={isSelected ? 'rgba(255,255,255,0.05)' : 'transparent'}
+                    x={LEFT_PAD + fi * colWidth}
+                    y={chartTop}
+                    width={colWidth}
+                    height={chartH}
+                    fill={isSelected ? 'rgba(255,255,255,0.03)' : 'transparent'}
                     style={{ cursor: 'pointer' }}
                   />
 
-                  {/* Row separator */}
+                  {/* Column separator */}
                   {fi > 0 && (
                     <line
-                      x1={LEFT_LABEL - 8} y1={TOP_PAD + fi * ROW_HEIGHT}
-                      x2={600 - RIGHT_PAD} y2={TOP_PAD + fi * ROW_HEIGHT}
-                      stroke="rgba(255,255,255,0.08)" strokeWidth="1"
+                      x1={LEFT_PAD + fi * colWidth} y1={chartTop}
+                      x2={LEFT_PAD + fi * colWidth} y2={chartBottom}
+                      stroke="rgba(255,255,255,0.06)" strokeWidth="1"
                     />
                   )}
 
                   {/* Selection indicator */}
                   {isSelected && (
                     <rect
-                      x={0}
-                      y={TOP_PAD + fi * ROW_HEIGHT}
-                      width={3}
-                      height={ROW_HEIGHT}
+                      x={LEFT_PAD + fi * colWidth}
+                      y={chartBottom}
+                      width={colWidth}
+                      height={3}
                       fill={c.main}
                     />
                   )}
 
-                  {/* Fund name label */}
+                  {/* Fund name label at bottom */}
                   <text
-                    x={8}
-                    y={cy + 4}
+                    x={cx}
+                    y={chartBottom + 20}
                     fill={c.main}
                     fontFamily={MONO}
-                    fontSize="10"
+                    fontSize="11"
                     fontWeight="700"
+                    textAnchor="middle"
                     textDecoration={isSelected ? 'underline' : 'none'}
                   >
                     {fund.name}
@@ -719,20 +729,18 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
 
                   {/* Whisker line P25 → P95 */}
                   <line
-                    x1={toX(vals.p25_moic)}
-                    y1={cy}
-                    x2={toX(vals.p95_moic)}
-                    y2={cy}
+                    x1={cx} y1={toY(vals.p95_moic)}
+                    x2={cx} y2={toY(vals.p25_moic)}
                     stroke={c.dim}
                     strokeWidth="1.5"
                   />
 
-                  {/* IQR bar P25 → P75 */}
+                  {/* Box P75 → P90 */}
                   <rect
-                    x={toX(vals.p25_moic)}
-                    y={cy - 6}
-                    width={Math.max(toX(vals.p75_moic) - toX(vals.p25_moic), 1)}
-                    height={12}
+                    x={cx - 14}
+                    y={toY(vals.p90_moic)}
+                    width={28}
+                    height={Math.max(toY(vals.p75_moic) - toY(vals.p90_moic), 1)}
                     fill={c.bg}
                     stroke={c.dim}
                     strokeWidth="1"
@@ -742,28 +750,28 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
                   {/* Dots */}
                   {PERCENTILE_KEYS.map((p) => {
                     const val = vals[p.key];
-                    const x = toX(val);
+                    const y = toY(val);
                     const isMedian = p.key === 'median_moic';
                     const dotColor = p.color || c.dim;
                     return (
                       <g key={p.key}>
                         <circle
-                          cx={x}
-                          cy={cy}
+                          cx={cx}
+                          cy={y}
                           r={isMedian ? 6 : 4}
                           fill={p.filled ? dotColor : '#000000'}
                           stroke={dotColor}
                           strokeWidth={p.filled ? 0 : 1.5}
                         />
-                        {/* Value label above */}
+                        {/* Value label to the right */}
                         <text
-                          x={x}
-                          y={cy - (isMedian ? 13 : 11)}
+                          x={cx + (isMedian ? 12 : 10)}
+                          y={y + 3}
                           fill={dotColor}
                           fontFamily={MONO}
                           fontSize="8"
                           fontWeight={p.filled ? '700' : '400'}
-                          textAnchor="middle"
+                          textAnchor="start"
                         >
                           {val.toFixed(2)}x
                         </text>
@@ -853,13 +861,16 @@ const KeyMetrics = ({ funds, fundResults }) => {
                 { key: 'p75_moic', label: 'P75 MOIC', suffix: 'x' },
                 { key: 'median_moic', label: 'P50 MOIC', suffix: 'x' },
                 { key: 'p25_moic', label: 'P25 MOIC', suffix: 'x' },
+                { key: 'fund_size', label: 'FUND SIZE', suffix: 'M', prefix: '$', decimals: 0 },
+                { key: 'avg_primary_invested', label: 'PRIMARY INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
+                { key: 'avg_follow_on_invested', label: 'PRO RATA INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
                 { key: 'avg_total_companies', label: 'AVG PORTFOLIO SIZE', suffix: '', decimals: 1 },
               ].map((row, ri, arr) => (
                 <tr key={row.key}>
                   <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: '#ffffff' }}>{row.label}</td>
                   {allResults.map((sim, si) => (
                     <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: sim.color.main }}>
-                      {fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
+                      {row.prefix || ''}{fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
                     </td>
                   ))}
                 </tr>

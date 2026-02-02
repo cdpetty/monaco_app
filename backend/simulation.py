@@ -272,6 +272,15 @@ class Experiment:
         # Portfolio size
         result['avg_portfolio_size'] = montecarlo.get_average_number_of_companies_post_pro_rata_adjustment()
 
+        # Average capital deployed
+        num_scenarios = len(montecarlo.firm_scenarios)
+        if num_scenarios > 0:
+            result['avg_primary_invested'] = sum(f.primary_capital_deployed for f in montecarlo.firm_scenarios) / num_scenarios
+            result['avg_follow_on_invested'] = sum(f.follow_on_capital_deployed for f in montecarlo.firm_scenarios) / num_scenarios
+        else:
+            result['avg_primary_invested'] = 0
+            result['avg_follow_on_invested'] = 0
+
         # Company counts
         stage_counter = montecarlo.get_total_companies_by_stage()
         for stage in config.stages:
