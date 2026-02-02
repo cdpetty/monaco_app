@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monaco - Quick Test</title>
+</head>
+<body>
+    <h1>Monaco Frontend Test</h1>
+    <p>If you can see this, the basic setup is working.</p>
+    <button onclick="testAPI()">Test API Connection</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                const data = await response.json();
+                result.innerHTML = '✅ API Connected: ' + JSON.stringify(data);
+            } catch (error) {
+                result.innerHTML = '❌ API Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

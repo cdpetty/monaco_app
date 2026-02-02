@@ -1,0 +1,346 @@
+{
+  "simulation_parameters": {
+    "fund_structure": {
+      "fund_size": {
+        "type": "Float",
+        "unit": "Million USD",
+        "typical_range": [40, 300],
+        "default": 200,
+        "description": "Total capital committed to the fund"
+      },
+      "follow_on_reserve": {
+        "type": "Float",
+        "unit": "Million USD",
+        "typical_range": [0, 100],
+        "default": 30,
+        "description": "Capital reserved for pro-rata and follow-on investments"
+      },
+      "pro_rata_at_or_below": {
+        "type": "Float",
+        "unit": "Million USD (post-money valuation)",
+        "typical_range": [30, 200],
+        "default": 70,
+        "description": "Valuation threshold below which fund exercises pro-rata rights"
+      },
+      "num_scenarios": {
+        "type": "Integer",
+        "typical_range": [1000, 10000],
+        "default": 3000,
+        "description": "Number of Monte Carlo simulations to run"
+      }
+    },
+    "investment_strategy": {
+      "primary_investments": {
+        "type": "Dictionary {stage: amount}",
+        "unit": "Million USD",
+        "example": {"Pre-seed": 85, "Seed": 85},
+        "description": "Capital allocated to each stage for initial investments"
+      },
+      "initial_investment_sizes": {
+        "type": "Dictionary {stage: size}",
+        "unit": "Million USD",
+        "example": {"Pre-seed": 1.5, "Seed": 4.0},
+        "description": "Check size for individual investments at each stage"
+      },
+      "stages": {
+        "type": "List[String]",
+        "default": ["Pre-seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "Series F", "Series G"],
+        "description": "Investment stages to model"
+      }
+    },
+    "market_conditions": {
+      "graduation_rates": {
+        "type": "Dictionary {stage: [advance_prob, fail_prob, m_and_a_prob]}",
+        "description": "Probability of each outcome at each stage",
+        "market_conditions": {
+          "MARKET": {
+            "description": "Baseline/average market conditions",
+            "Pre-seed": [0.50, 0.35, 0.15],
+            "Seed": [0.50, 0.35, 0.15],
+            "Series_A": [0.50, 0.30, 0.20],
+            "Series_B": [0.50, 0.25, 0.25],
+            "Series_C": [0.50, 0.25, 0.25],
+            "Series_D": [0.50, 0.25, 0.25],
+            "Series_E": [0.40, 0.30, 0.30],
+            "Series_F": [0.30, 0.30, 0.30],
+            "Series_G": ["N/A", "N/A", "N/A"]
+          },
+          "ABOVE_MARKET": {
+            "description": "Superior market conditions with higher graduation rates",
+            "Pre-seed": [0.60, 0.30, 0.10],
+            "Seed": [0.60, 0.30, 0.10],
+            "Series_A": [0.60, 0.25, 0.15],
+            "Series_B": [0.55, 0.25, 0.20],
+            "Series_C": [0.55, 0.25, 0.20],
+            "Series_D": [0.55, 0.25, 0.20]
+          },
+          "BELOW_MARKET": {
+            "description": "Weaker market conditions with higher failure rates",
+            "Pre-seed": [0.45, 0.40, 0.15],
+            "Seed": [0.45, 0.40, 0.15],
+            "Series_A": [0.50, 0.35, 0.15],
+            "Series_B": [0.50, 0.35, 0.15],
+            "Series_C": [0.50, 0.30, 0.20],
+            "Series_D": [0.50, 0.30, 0.20]
+          }
+        }
+      },
+      "stage_valuations": {
+        "type": "Dictionary {stage: valuation_in_millions}",
+        "unit": "Million USD (post-money)",
+        "default_values": {
+          "Pre-seed": 15,
+          "Seed": 30,
+          "Series A": 70,
+          "Series B": 200,
+          "Series C": 500,
+          "Series D": 750,
+          "Series E": 1500,
+          "Series F": 5000,
+          "Series G": 10000
+        },
+        "description": "Post-money valuation at each round"
+      },
+      "stage_dilution": {
+        "type": "Dictionary {stage: dilution_percentage}",
+        "unit": "Percentage (0-1)",
+        "default_values": {
+          "Seed": 0.20,
+          "Series A": 0.22,
+          "Series B": 0.20,
+          "Series C": 0.15,
+          "Series D": 0.10,
+          "Series E": 0.08,
+          "Series F": 0.08,
+          "Series G": 0.08
+        },
+        "description": "Ownership dilution from new investors at each stage"
+      }
+    },
+    "time_parameters": {
+      "lifespan_periods": {
+        "type": "Integer",
+        "default": 8,
+        "description": "Number of time periods to simulate (roughly 1.5 years each)"
+      },
+      "lifespan_years": {
+        "type": "Integer",
+        "default": 13,
+        "description": "Total fund lifespan in years for IRR calculations"
+      }
+    }
+  },
+  "m_and_a_outcomes": {
+    "description": "Outcome multipliers when company gets acquired",
+    "probabilities": {
+      "10x": 0.01,
+      "5x": 0.05,
+      "1x": 0.60,
+      "0.1x": 0.34
+    },
+    "note": "These are applied to the company valuation at time of exit"
+  },
+  "output_metrics": {
+    "fund_configuration": [
+      "fund_size",
+      "follow_on_reserve",
+      "pro_rata_at_or_below"
+    ],
+    "investment_amounts": [
+      "Pre-seed_investment_amount",
+      "Seed_investment_amount",
+      "Pre-seed_total_invested",
+      "Seed_total_invested"
+    ],
+    "ownership": [
+      "Pre-seed_avg_ownership",
+      "Seed_avg_ownership",
+      "overall_avg_ownership"
+    ],
+    "portfolio_composition": [
+      "avg_portfolio_size",
+      "total_portfolio_companies",
+      "Pre-seed_companies",
+      "Seed_companies",
+      "Series A_companies",
+      "Series B_companies",
+      "Series C_companies",
+      "Series D_companies",
+      "Series E_companies",
+      "Series F_companies",
+      "Series G_companies"
+    ],
+    "outcomes": [
+      "Alive Companies",
+      "Failed Companies",
+      "Acquired Companies",
+      "Pro Rata Companies",
+      "No Pro Rata Companies"
+    ],
+    "returns": [
+      "25th_percentile",
+      "50th_percentile",
+      "75th_percentile",
+      "90th_percentile",
+      "total_MOIC",
+      "total_value_acquired",
+      "total_value_alive"
+    ],
+    "pro_rata_tracking": [
+      "# times pro rata",
+      "# times pass on pro rata: out of reserved capital",
+      "# times pass on pro rata: too late stage"
+    ]
+  },
+  "visualization_functions": [
+    {
+      "name": "visualize_multiple_strategies",
+      "input": "List of simulation result dictionaries",
+      "output": "Matplotlib line chart + tab-separated table",
+      "plots": {
+        "chart_type": "Line chart with multiple percentiles",
+        "x_axis": "Strategy number/label",
+        "y_axis": "MOIC (Multiple on Invested Capital)",
+        "lines": [
+          {
+            "label": "25th Percentile",
+            "style": "dotted",
+            "color": "darkgray",
+            "width": 2
+          },
+          {
+            "label": "50th Percentile (Median)",
+            "style": "solid",
+            "color": "darkgray",
+            "width": 2
+          },
+          {
+            "label": "75th Percentile",
+            "style": "solid",
+            "color": "red",
+            "width": 2.5
+          },
+          {
+            "label": "90th Percentile",
+            "style": "solid",
+            "color": "green",
+            "width": 2
+          }
+        ],
+        "shading": "Between 75th and 90th percentiles (red, 10% opacity)"
+      }
+    },
+    {
+      "name": "run_single_simulation_and_visualize",
+      "input": "Montecarlo_Sim_Configuration object",
+      "output": "Matplotlib histogram + printed statistics",
+      "plots": {
+        "chart_type": "Histogram with percentile lines",
+        "x_axis": "MOIC bins (0x to 10x+)",
+        "y_axis": "Percentage of simulations (%)",
+        "percentile_lines": [
+          {
+            "percentile": 25,
+            "style": "dotted",
+            "color": "darkgray"
+          },
+          {
+            "percentile": 50,
+            "style": "solid",
+            "color": "darkgray"
+          },
+          {
+            "percentile": 75,
+            "style": "solid",
+            "color": "red"
+          },
+          {
+            "percentile": 90,
+            "style": "solid",
+            "color": "green"
+          }
+        ]
+      }
+    },
+    {
+      "name": "print_montecarlo_simulation_results_table",
+      "input": "List of simulation result dictionaries",
+      "output": "Pandas DataFrame with per-firm detailed results",
+      "columns": [
+        "Firm",
+        "MOIC",
+        "Total Companies",
+        "Pre-seed Investments",
+        "Seed Investments",
+        "Pre-seed Ending Value",
+        "Seed Ending Value",
+        "Alive Companies",
+        "Failed Companies",
+        "Acquired Companies",
+        "Alive Value",
+        "Acquired Value",
+        "Percentage Row (% breakdown)"
+      ]
+    }
+  ],
+  "key_calculations": {
+    "MOIC": {
+      "formula": "Total Portfolio Value / Capital Deployed",
+      "total_portfolio_value": "Sum of (Valuation × Ownership) for all companies",
+      "capital_deployed": "Primary Capital + Follow-on Capital"
+    },
+    "ownership_after_pro_rata": {
+      "formula": "(Old Ownership × (1 - Dilution)) + (Pro-rata Investment / New Valuation)",
+      "pro_rata_investment": "min((Old Ownership - New Ownership) × Valuation, Available Reserve)"
+    },
+    "m_and_a_return": {
+      "exit_value": "Current Valuation × Multiplier",
+      "fund_value": "Exit Value × Fund Ownership"
+    }
+  },
+  "example_scenarios": [
+    {
+      "name": "Market Conditions Comparison",
+      "parameters": {
+        "fund_size": 200,
+        "follow_on_reserve": 30,
+        "primary_investments": {"Pre-seed": 85, "Seed": 85},
+        "initial_investment_sizes": {"Pre-seed": 1.5, "Seed": 4.0},
+        "graduation_rates_options": ["MARKET", "ABOVE_MARKET", "BELOW_MARKET"],
+        "num_scenarios": 3000
+      }
+    },
+    {
+      "name": "Fund Size Sensitivity",
+      "parameters": {
+        "fund_sizes": [40, 60, 80, 100, 120, 140, 160, 180, 200],
+        "follow_on_reserve_percent": 0.30,
+        "primary_investments": {"Pre-seed": "70% of investable"},
+        "num_scenarios": 3000
+      }
+    },
+    {
+      "name": "Check Size Optimization",
+      "parameters": {
+        "fund_size": 200,
+        "primary_investments": {"Pre-seed": 70, "Seed": 70},
+        "check_size_options": [
+          {"Pre-seed": 1.2, "Seed": 2.4},
+          {"Pre-seed": 1.5, "Seed": 3.0},
+          {"Pre-seed": 2.0, "Seed": 4.0}
+        ],
+        "follow_on_reserve": 60,
+        "num_scenarios": 3000
+      }
+    },
+    {
+      "name": "Pro-rata Strategy Analysis",
+      "parameters": {
+        "pro_rata_amounts": [0, 30, 60, 100],
+        "pro_rata_at_or_below_stages": ["Seed", "Series A", "Series B", "Series C", "Series D"],
+        "fund_size": 200,
+        "num_scenarios": 5000
+      }
+    }
+  ]
+}
