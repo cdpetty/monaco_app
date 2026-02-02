@@ -53,6 +53,7 @@ class SimulationConfig(BaseModel):
     pro_rata: Optional[float] = Field(default=0.5, description="Pro-rata participation (0-1) [deprecated]")
     pro_rata_max_valuation: Optional[float] = Field(default=None, description="Max valuation ($M) for pro-rata follow-on")
     dry_powder_reserve_for_pro_rata: Optional[float] = Field(default=30, description="Reserve for pro-rata (%)")
+    reinvest_unused_reserve: Optional[bool] = Field(default=True, description="Reinvest unused follow-on reserve as new primary investments")
     pro_rata_ownership_dilution_per_round: Optional[float] = Field(default=0.2, description="Dilution per round")
     breakout_percentile: Optional[float] = Field(default=10, description="Breakout percentile")
     breakout_from_series_onwards: Optional[str] = Field(default="Series A", description="Breakout starting stage")
@@ -297,7 +298,8 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
         "follow_on_reserve": follow_on_reserve,
         "fund_size": fund_size,
         "pro_rata_at_or_below": pro_rata_at_or_below,
-        "num_scenarios": sim_config.num_iterations or 3000
+        "num_scenarios": sim_config.num_iterations or 3000,
+        "reinvest_unused_reserve": sim_config.reinvest_unused_reserve if sim_config.reinvest_unused_reserve is not None else True
     }
 
 

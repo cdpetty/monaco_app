@@ -164,7 +164,8 @@ class Experiment:
                 follow_on_reserve=config['follow_on_reserve'],
                 fund_size=config['fund_size'],
                 pro_rata_at_or_below=config['pro_rata_at_or_below'],
-                num_scenarios=config['num_scenarios']
+                num_scenarios=config['num_scenarios'],
+                reinvest_unused_reserve=config.get('reinvest_unused_reserve', True)
             )
         except KeyError as e:
             print(f"Missing required configuration parameter: {e}")
@@ -277,9 +278,10 @@ class Experiment:
             result[f'{stage}_companies'] = stage_counter.get(stage, 0)
 
         state_counter = montecarlo.get_total_companies_by_state()
-        result['Alive Companies'] = state_counter['Alive']
-        result['Failed Companies'] = state_counter['Failed']
-        result['Acquired Companies'] = state_counter['Acquired']
+        num_scenarios = len(montecarlo.firm_scenarios)
+        result['Alive Companies'] = state_counter['Alive'] / num_scenarios if num_scenarios else 0
+        result['Failed Companies'] = state_counter['Failed'] / num_scenarios if num_scenarios else 0
+        result['Acquired Companies'] = state_counter['Acquired'] / num_scenarios if num_scenarios else 0
 
         pro_rata_counter = montecarlo.get_total_companies_pro_rata()
         result['Pro Rata Companies'] = pro_rata_counter['Pro Rata']

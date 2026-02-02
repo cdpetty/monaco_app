@@ -12,6 +12,7 @@ import numpy as np
 from typing import List, Dict, Any
 
 from models import Company, Firm, Montecarlo, Montecarlo_Sim_Configuration
+from simulation import Experiment
 from main import convert_frontend_config_to_backend, SimulationConfig
 from config import (
     DEFAULT_STAGES, MARKET, DEFAULT_STAGE_DILUTION,
@@ -967,6 +968,174 @@ def test_api_pro_rata_threshold():
                     actual=str(e), passed=False, details=str(e))
 
 
+def test_reinvest_flag_reaches_simulation():
+    """Verify reinvest_unused_reserve flows through the full API→Experiment path."""
+    try:
+        frontend = _make_frontend_config(reinvest_unused_reserve=False, num_iterations=50)
+        backend = convert_frontend_config_to_backend(frontend)
+
+        # Flag should be in the converted dict
+        flag_in_dict = backend.get('reinvest_unused_reserve') is False
+
+        # Flag should survive Experiment.create_montecarlo_sim_configuration
+        exp = Experiment()
+        config = exp.create_montecarlo_sim_configuration(backend)
+        flag_on_config = config.reinvest_unused_reserve is False
+
+        # Flag should reach Montecarlo.firm_attributes
+        mc = Montecarlo(config)
+        flag_on_mc = mc.firm_attributes['reinvest_unused_reserve'] is False
+
+        passed = flag_in_dict and flag_on_config and flag_on_mc
+
+        return dict(
+            id='reinvest_flag_reaches_simulation',
+            name='Reinvest Flag Reaches Simulation',
+            category='integration',
+            description=(
+                'reinvest_unused_reserve=False must flow from SimulationConfig through '
+                'convert_frontend_config_to_backend, Experiment.create_montecarlo_sim_configuration, '
+                'and into Montecarlo.firm_attributes without being dropped.'
+            ),
+            expected='Flag is False at every layer',
+            actual=f'dict={flag_in_dict}, config={flag_on_config}, montecarlo={flag_on_mc}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='reinvest_flag_reaches_simulation', name='Reinvest Flag Reaches Simulation',
+                    category='integration', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_reinvest_off_fewer_companies():
+    """With reinvest off, higher reserve must produce fewer companies."""
+    try:
+        exp = Experiment()
+
+        # 30% reserve, reinvest off
+        fe_a = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=30,
+            reinvest_unused_reserve=False, num_iterations=200, num_periods=8,
+            check_sizes_at_entry={'Pre-seed': 1.5, 'Seed': 2.0},
+        )
+        d_a = convert_frontend_config_to_backend(fe_a)
+        cfg_a = exp.create_montecarlo_sim_configuration(d_a)
+        result_a = exp.run_montecarlo(cfg_a)
+        avg_a = result_a['avg_portfolio_size']
+
+        # 50% reserve, reinvest off
+        fe_b = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=50,
+            reinvest_unused_reserve=False, num_iterations=200, num_periods=8,
+            check_sizes_at_entry={'Pre-seed': 1.5, 'Seed': 2.0},
+        )
+        d_b = convert_frontend_config_to_backend(fe_b)
+        cfg_b = exp.create_montecarlo_sim_configuration(d_b)
+        result_b = exp.run_montecarlo(cfg_b)
+        avg_b = result_b['avg_portfolio_size']
+
+        passed = avg_a > avg_b
+
+        return dict(
+            id='reinvest_off_fewer_companies',
+            name='Reinvest Off → Fewer Companies with Higher Reserve',
+            category='integration',
+            description=(
+                'With reinvest_unused_reserve=False, a fund with 50% reserve should have '
+                'strictly fewer average companies than one with 30% reserve (same fund size), '
+                'because unused reserve is NOT recycled into new primary investments.'
+            ),
+            expected=f'30% reserve companies > 50% reserve companies',
+            actual=f'30% reserve={avg_a:.1f}, 50% reserve={avg_b:.1f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='reinvest_off_fewer_companies', name='Reinvest Off → Fewer Companies',
+                    category='integration', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_moic_uses_fund_size():
+    """MOIC must be calculated against full fund size, not just deployed capital."""
+    try:
+        config = make_config(num_scenarios=1)
+        mc = Montecarlo(config)
+        mc.initialize_scenarios()
+        mc.simulate(seed=99)
+
+        firm = mc.firm_scenarios[0]
+        portfolio_value = firm.get_total_value_of_portfolio()
+        moic = firm.get_MoM()
+
+        expected_moic = round(portfolio_value / firm.fund_size, 1)
+        deployed_moic = round(portfolio_value / firm.get_capital_invested(), 1) if firm.get_capital_invested() > 0 else 0
+
+        passed = moic == expected_moic
+
+        return dict(
+            id='moic_uses_fund_size',
+            name='MOIC Based on Fund Size',
+            category='deterministic',
+            description=(
+                'MOIC should equal portfolio_value / fund_size (not portfolio_value / capital_invested). '
+                'This ensures that undeployed reserve still counts as a cost basis.'
+            ),
+            expected=f'MOIC = portfolio_value / fund_size = {expected_moic}x',
+            actual=f'MOIC = {moic}x (vs capital-invested-based = {deployed_moic}x)',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='moic_uses_fund_size', name='MOIC Based on Fund Size',
+                    category='deterministic', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_avg_company_counts_are_averages():
+    """Alive/Failed/Acquired counts must be per-iteration averages, not totals."""
+    try:
+        exp = Experiment()
+        fe = _make_frontend_config(num_iterations=100)
+        d = convert_frontend_config_to_backend(fe)
+        cfg = exp.create_montecarlo_sim_configuration(d)
+        result = exp.run_montecarlo(cfg)
+
+        alive = result['Alive Companies']
+        failed = result['Failed Companies']
+        acquired = result['Acquired Companies']
+        avg_portfolio = result['avg_portfolio_size']
+
+        # Each count should be a reasonable per-iteration number, not a sum across iterations.
+        # With ~100 companies per iteration, no count should exceed avg_portfolio * 2
+        # and the sum of alive+failed+acquired should be close to avg_portfolio.
+        total = alive + failed + acquired
+        ratio = total / avg_portfolio if avg_portfolio > 0 else 999
+
+        # The sum should be roughly equal to avg portfolio size (ratio ≈ 1.0)
+        passed = 0.8 < ratio < 1.5
+
+        return dict(
+            id='avg_company_counts_are_averages',
+            name='Company Counts Are Per-Iteration Averages',
+            category='integration',
+            description=(
+                'Alive/Failed/Acquired company counts must be per-iteration averages, '
+                'not totals summed across all iterations. The sum of alive+failed+acquired '
+                'should approximately equal avg_portfolio_size.'
+            ),
+            expected=f'(alive+failed+acquired) / avg_portfolio ≈ 1.0',
+            actual=f'alive={alive:.1f}, failed={failed:.1f}, acquired={acquired:.1f}, total={total:.1f}, avg_portfolio={avg_portfolio:.1f}, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='avg_company_counts_are_averages', name='Company Counts Are Averages',
+                    category='integration', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -992,6 +1161,10 @@ def run_all_tests() -> List[Dict[str, Any]]:
         test_api_ownership_sanity,
         test_api_moic_matches_direct,
         test_api_pro_rata_threshold,
+        test_reinvest_flag_reaches_simulation,
+        test_reinvest_off_fewer_companies,
+        test_moic_uses_fund_size,
+        test_avg_company_counts_are_averages,
     ]
     results = []
     for t in tests:

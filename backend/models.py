@@ -271,8 +271,8 @@ class Firm:
         return self.follow_on_reserve - self.follow_on_capital_deployed
 
     def get_MoM(self) -> float:
-        """Calculate Multiple on Money (MoM)."""
-        return round(self.get_total_value_of_portfolio() / self.get_capital_invested(), 1)
+        """Calculate Multiple on Money (MoM) based on full fund size."""
+        return round(self.get_total_value_of_portfolio() / self.fund_size, 1)
 
     def __repr__(self) -> str:
         return str(self.get_detailed_portfolio_snapshot())
@@ -311,7 +311,8 @@ class Montecarlo:
             'fund_size': config.fund_size,
             'firm_lifespan_periods': config.lifespan_periods,
             'firm_lifespan_years': config.lifespan_years,
-            'pro_rata_at_or_below': config.pro_rata_at_or_below
+            'pro_rata_at_or_below': config.pro_rata_at_or_below,
+            'reinvest_unused_reserve': config.reinvest_unused_reserve
         }
 
         for stage in config.primary_investments.keys():
@@ -381,7 +382,7 @@ class Montecarlo:
                 firm.period_snapshots.append(firm.get_detailed_portfolio_snapshot())
 
             # Deploy remaining capital as primary investments
-            if firm.get_remaining_follow_on_capital() > 0:
+            if self.firm_attributes['reinvest_unused_reserve'] and firm.get_remaining_follow_on_capital() > 0:
                 extra_investments = []
                 extra_investment_type = self.firm_attributes['primary_investments'][0]
                 num_extra_investments = int(firm.get_remaining_follow_on_capital() // extra_investment_type[1])
@@ -620,7 +621,8 @@ class Montecarlo_Sim_Configuration:
                  lifespan_periods: int, lifespan_years: int,
                  primary_investments: Dict, initial_investment_sizes: Dict,
                  follow_on_reserve: float, fund_size: float,
-                 pro_rata_at_or_below: float, num_scenarios: int):
+                 pro_rata_at_or_below: float, num_scenarios: int,
+                 reinvest_unused_reserve: bool = True):
         # Market variables
         self.stages = stages
         self.graduation_rates = graduation_rates.copy()
@@ -635,6 +637,7 @@ class Montecarlo_Sim_Configuration:
         self.follow_on_reserve = follow_on_reserve
         self.fund_size = fund_size
         self.pro_rata_at_or_below = pro_rata_at_or_below
+        self.reinvest_unused_reserve = reinvest_unused_reserve
 
         # Make minor adjustments for modeling
         self.make_minor_round_size_adjustments_for_modeling()

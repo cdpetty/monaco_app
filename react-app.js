@@ -8,6 +8,7 @@ const SEED_VALUATION = 30;   // $M
 const DEFAULT_CONFIG = {
   fund_size_m: 50,
   dry_powder_reserve_for_pro_rata: 30,
+  reinvest_unused_reserve: true,
   pro_rata_max_valuation: 70,
   preseed_pct: 100,
   preseed_check_size: 1.5,
@@ -430,6 +431,19 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
           suffix="% of fund"
         />
 
+        <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="checkbox"
+            id={`reinvest-${activeFundId}`}
+            checked={config.reinvest_unused_reserve !== false}
+            onChange={(e) => setField('reinvest_unused_reserve', e.target.checked)}
+            style={{ accentColor: '#ffffff', width: '12px', height: '12px', cursor: 'pointer' }}
+          />
+          <label htmlFor={`reinvest-${activeFundId}`} style={{ fontFamily: MONO, fontSize: '9px', color: DIM, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Re-invest unused reserve
+          </label>
+        </div>
+
         <SectionHeader number="02" label="Stage & Check Size" />
 
         <StageAllocationControl
@@ -515,11 +529,11 @@ function buildHistogram(distribution, numBins = 20) {
 }
 
 const PERCENTILE_KEYS = [
-  { key: 'p25_moic', label: 'P25' },
-  { key: 'median_moic', label: 'P50' },
-  { key: 'p75_moic', label: 'P75' },
-  { key: 'p90_moic', label: 'P90' },
-  { key: 'p95_moic', label: 'P95' },
+  { key: 'p25_moic', label: 'P25', color: null, filled: false },
+  { key: 'median_moic', label: 'P50', color: '#ffffff', filled: true },
+  { key: 'p75_moic', label: 'P75', color: '#4ade80', filled: true },
+  { key: 'p90_moic', label: 'P90', color: '#60a5fa', filled: true },
+  { key: 'p95_moic', label: 'P95', color: '#ffffff', filled: false },
 ];
 
 function niceMax(value) {
@@ -618,20 +632,21 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
               {PERCENTILE_KEYS.map((p, i) => {
                 const lx = LEFT_LABEL + i * 55;
                 const isMedian = p.key === 'median_moic';
+                const dotColor = p.color || '#ffffff';
                 return (
                   <g key={p.key}>
                     <circle
                       cx={lx}
                       cy={TOP_PAD - 18}
                       r={isMedian ? 5 : 3.5}
-                      fill={isMedian ? '#ffffff' : 'none'}
-                      stroke="#ffffff"
-                      strokeWidth={isMedian ? 0 : 1.5}
+                      fill={p.filled ? dotColor : 'none'}
+                      stroke={dotColor}
+                      strokeWidth={p.filled ? 0 : 1.5}
                     />
                     <text
                       x={lx + 10}
                       y={TOP_PAD - 14}
-                      fill={DIM}
+                      fill={p.color || DIM}
                       fontFamily={MONO}
                       fontSize="8"
                     >
@@ -729,24 +744,25 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
                     const val = vals[p.key];
                     const x = toX(val);
                     const isMedian = p.key === 'median_moic';
+                    const dotColor = p.color || c.dim;
                     return (
                       <g key={p.key}>
                         <circle
                           cx={x}
                           cy={cy}
                           r={isMedian ? 6 : 4}
-                          fill={isMedian ? c.main : '#000000'}
-                          stroke={c.main}
-                          strokeWidth={isMedian ? 0 : 1.5}
+                          fill={p.filled ? dotColor : '#000000'}
+                          stroke={dotColor}
+                          strokeWidth={p.filled ? 0 : 1.5}
                         />
                         {/* Value label above */}
                         <text
                           x={x}
                           y={cy - (isMedian ? 13 : 11)}
-                          fill={isMedian ? c.main : c.dim}
+                          fill={dotColor}
                           fontFamily={MONO}
-                          fontSize={isMedian ? '10' : '8'}
-                          fontWeight={isMedian ? '700' : '400'}
+                          fontSize="8"
+                          fontWeight={p.filled ? '700' : '400'}
                           textAnchor="middle"
                         >
                           {val.toFixed(2)}x
@@ -800,7 +816,11 @@ const ReturnFrequency = ({ funds, fundResults, activeFundId }) => {
 const KeyMetrics = ({ funds, fundResults }) => {
   const allResults = funds
     .filter((f) => fundResults[f.id])
-    .map((f, i) => ({ name: f.name, results: fundResults[f.id].results, color: FUND_COLORS[funds.indexOf(f) % FUND_COLORS.length] }));
+    .map((f, i) => {
+      const r = fundResults[f.id];
+      const p95 = computeP95(r.moic_distribution);
+      return { name: f.name, results: { ...r.results, p95_moic: p95 != null ? p95 : r.results.p90_moic }, color: FUND_COLORS[funds.indexOf(f) % FUND_COLORS.length] };
+    });
 
   const fmt = (v, decimals = 2) => v != null ? v.toFixed(decimals) : '-';
 
@@ -828,20 +848,17 @@ const KeyMetrics = ({ funds, fundResults }) => {
             </thead>
             <tbody>
               {[
-                { key: 'mean_moic', label: 'MEAN MOIC', suffix: 'x' },
-                { key: 'median_moic', label: 'MEDIAN MOIC', suffix: 'x' },
-                { key: 'p25_moic', label: 'P25 MOIC', suffix: 'x' },
-                { key: 'p75_moic', label: 'P75 MOIC', suffix: 'x' },
+                { key: 'p95_moic', label: 'P95 MOIC', suffix: 'x' },
                 { key: 'p90_moic', label: 'P90 MOIC', suffix: 'x' },
-                { key: 'std_moic', label: 'STD DEV', suffix: 'x' },
-                { key: 'avg_total_companies', label: 'AVG COMPANIES', suffix: '', decimals: 1 },
-                { key: 'avg_failed_companies', label: 'AVG FAILED', suffix: '', decimals: 1 },
-                { key: 'avg_acquired_companies', label: 'AVG ACQUIRED', suffix: '', decimals: 1 },
+                { key: 'p75_moic', label: 'P75 MOIC', suffix: 'x' },
+                { key: 'median_moic', label: 'P50 MOIC', suffix: 'x' },
+                { key: 'p25_moic', label: 'P25 MOIC', suffix: 'x' },
+                { key: 'avg_total_companies', label: 'AVG PORTFOLIO SIZE', suffix: '', decimals: 1 },
               ].map((row, ri, arr) => (
                 <tr key={row.key}>
-                  <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: ri < 6 ? '#ffffff' : DIM }}>{row.label}</td>
+                  <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: '#ffffff' }}>{row.label}</td>
                   {allResults.map((sim, si) => (
-                    <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: ri < 6 ? sim.color.main : sim.color.dim }}>
+                    <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: sim.color.main }}>
                       {fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
                     </td>
                   ))}
@@ -867,13 +884,38 @@ const ErrorBanner = ({ error, onDismiss }) => {
 };
 
 const App = () => {
-  const [funds, setFunds] = useState([
-    { id: 1, name: 'Fund A', config: { ...DEFAULT_CONFIG } },
-  ]);
-  const [activeFundId, setActiveFundId] = useState(1);
-  const [marketScenario, setMarketScenario] = useState('MARKET');
-  const [numPeriods, setNumPeriods] = useState(8);
-  const [numIterations, setNumIterations] = useState(3000);
+  const [funds, setFunds] = useState(() => {
+    const stored = localStorage.getItem('monaco_funds');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          nextFundId = Math.max(...parsed.map(f => f.id)) + 1;
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return [{ id: 1, name: 'Fund A', config: { ...DEFAULT_CONFIG } }];
+  });
+  const [activeFundId, setActiveFundId] = useState(() => {
+    const stored = localStorage.getItem('monaco_funds');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].id;
+      } catch (e) {}
+    }
+    return 1;
+  });
+  const [marketScenario, setMarketScenario] = useState(() => {
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.marketScenario || 'MARKET'; } catch(e) { return 'MARKET'; }
+  });
+  const [numPeriods, setNumPeriods] = useState(() => {
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numPeriods || 8; } catch(e) { return 8; }
+  });
+  const [numIterations, setNumIterations] = useState(() => {
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 3000; } catch(e) { return 3000; }
+  });
   const [fundResults, setFundResults] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -928,14 +970,23 @@ const App = () => {
     };
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('monaco_funds', JSON.stringify(funds));
+  }, [funds]);
+
+  useEffect(() => {
+    localStorage.setItem('monaco_globals', JSON.stringify({ marketScenario, numPeriods, numIterations }));
+  }, [marketScenario, numPeriods, numIterations]);
+
   const addFund = useCallback(() => {
     if (funds.length >= 4) return;
     const usedNames = new Set(funds.map((f) => f.name));
     const name = FUND_NAMES.find((n) => !usedNames.has(n)) || `Fund ${nextFundId}`;
-    const newFund = { id: nextFundId++, name, config: { ...DEFAULT_CONFIG } };
+    const source = funds.find((f) => f.id === activeFundId) || funds[funds.length - 1];
+    const newFund = { id: nextFundId++, name, config: { ...source.config } };
     setFunds((prev) => [...prev, newFund]);
     setActiveFundId(newFund.id);
-  }, [funds]);
+  }, [funds, activeFundId]);
 
   const removeFund = useCallback((id) => {
     setFunds((prev) => {
