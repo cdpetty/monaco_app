@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import uvicorn
+import numpy as np
 
 from models import Montecarlo_Sim_Configuration, Montecarlo
 from simulation import Experiment
@@ -46,6 +47,9 @@ app.add_middleware(
 class SimulationConfig(BaseModel):
     """Simulation configuration matching frontend schema."""
     fund_size_m: Optional[float] = Field(default=50, description="Fund size in millions")
+    management_fee_pct: Optional[float] = Field(default=2, description="Annual management fee percentage")
+    fee_duration_years: Optional[float] = Field(default=10, description="Number of years fees are charged")
+    recycled_capital_pct: Optional[float] = Field(default=20, description="Percentage of fund size recycled back as available capital")
     capital_per_company: Optional[float] = Field(default=10, description="Capital per company in millions")
     deploy_percentage: Optional[float] = Field(default=90, description="Percentage of fund to deploy")
     check_sizes_at_entry: Optional[Dict[str, float]] = Field(default=None, description="Check sizes by stage in millions")
@@ -60,6 +64,7 @@ class SimulationConfig(BaseModel):
     market_scenario: Optional[str] = Field(default="MARKET", description="Market scenario")
     graduation_rates: Optional[Dict[str, List[float]]] = Field(default=None, description="Custom graduation rates by stage")
     stage_valuations: Optional[Dict[str, float]] = Field(default=None, description="Custom stage valuations")
+    stage_allocation_pcts: Optional[Dict[str, float]] = Field(default=None, description="Percentage of primary capital allocated to each entry stage")
     num_companies_to_simulate: Optional[int] = Field(default=100, description="Number of companies")
     num_iterations: Optional[int] = Field(default=5000, description="Number of iterations")
     num_periods: Optional[int] = Field(default=8, description="Number of periods")
@@ -253,7 +258,16 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
         graduation_rates = market_scenarios.get(sim_config.market_scenario or "MARKET", MARKET)
 
     # All values in millions to match stage_valuations and internal model units
-    fund_size = sim_config.fund_size_m or 50
+    committed_capital = sim_config.fund_size_m or 50
+
+    # Calculate available capital after fees and recycling
+    mgmt_fee_pct = (sim_config.management_fee_pct if sim_config.management_fee_pct is not None else 2) / 100
+    fee_years = sim_config.fee_duration_years if sim_config.fee_duration_years is not None else 10
+    recycled_pct = (sim_config.recycled_capital_pct if sim_config.recycled_capital_pct is not None else 20) / 100
+
+    total_fees = committed_capital * mgmt_fee_pct * fee_years
+    recycled_capital = committed_capital * recycled_pct
+    fund_size = committed_capital - total_fees + recycled_capital
 
     # Calculate follow-on reserve
     dry_powder_pct = (sim_config.dry_powder_reserve_for_pro_rata or 30) / 100
@@ -268,12 +282,22 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
     initial_investment_sizes = {}
 
     if check_sizes:
-        # Split primary capital proportionally across provided stages
-        num_entry_stages = len(check_sizes)
-        per_stage = total_primary_investment / num_entry_stages
-        for stage, check in check_sizes.items():
-            primary_investments[stage] = per_stage
-            initial_investment_sizes[stage] = check  # already in millions
+        allocation_pcts = sim_config.stage_allocation_pcts
+        if allocation_pcts:
+            # Distribute capital proportionally based on allocation percentages
+            total_pct = sum(allocation_pcts.get(s, 0) for s in check_sizes)
+            for stage, check in check_sizes.items():
+                stage_pct = allocation_pcts.get(stage, 0)
+                fraction = stage_pct / total_pct if total_pct > 0 else 1 / len(check_sizes)
+                primary_investments[stage] = total_primary_investment * fraction
+                initial_investment_sizes[stage] = check
+        else:
+            # Legacy: no allocation percentages, split equally
+            num_entry_stages = len(check_sizes)
+            per_stage = total_primary_investment / num_entry_stages
+            for stage, check in check_sizes.items():
+                primary_investments[stage] = per_stage
+                initial_investment_sizes[stage] = check
     else:
         # Fallback: all to Pre-seed at $1.5M checks
         primary_investments['Pre-seed'] = total_primary_investment
@@ -297,6 +321,7 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
         "initial_investment_sizes": initial_investment_sizes,
         "follow_on_reserve": follow_on_reserve,
         "fund_size": fund_size,
+        "committed_capital": committed_capital,
         "pro_rata_at_or_below": pro_rata_at_or_below,
         "num_scenarios": sim_config.num_iterations or 5000,
         "reinvest_unused_reserve": sim_config.reinvest_unused_reserve if sim_config.reinvest_unused_reserve is not None else True
@@ -331,6 +356,16 @@ async def run_simulation(request: SimulationRequest) -> Dict[str, Any]:
         if not result:
             raise HTTPException(status_code=400, detail="Simulation failed")
 
+        # Compute TVPI distribution from MOIC distribution
+        # MOIC = portfolio_value / adjusted_fund_size
+        # TVPI = portfolio_value / committed_capital
+        # TVPI = MOIC * adjusted_fund_size / committed_capital
+        moic_outcomes = result.get("moic_outcomes", [])
+        adjusted_fund_size = config_dict["fund_size"]
+        committed_capital = config_dict["committed_capital"]
+        tvpi_factor = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
+        tvpi_outcomes = [m * tvpi_factor for m in moic_outcomes]
+
         # Transform backend result format to frontend format
         transformed_results = {
             "mean_moic": result.get("total_MOIC", 0),
@@ -346,13 +381,19 @@ async def run_simulation(request: SimulationRequest) -> Dict[str, Any]:
             "avg_acquired_companies": result.get("Acquired Companies", 0),
             "total_value_invested": result.get("fund_size", 0),
             "total_value_returned": result.get("total_value_acquired", 0) + result.get("total_value_alive", 0),
+            "mean_tvpi": float(np.mean(tvpi_outcomes)) if tvpi_outcomes else 0,
+            "median_tvpi": float(np.percentile(tvpi_outcomes, 50)) if tvpi_outcomes else 0,
+            "p25_tvpi": float(np.percentile(tvpi_outcomes, 25)) if tvpi_outcomes else 0,
+            "p75_tvpi": float(np.percentile(tvpi_outcomes, 75)) if tvpi_outcomes else 0,
+            "p90_tvpi": float(np.percentile(tvpi_outcomes, 90)) if tvpi_outcomes else 0,
         }
 
         return {
             "name": request.name,
             "config": request.config.dict(),
             "results": transformed_results,
-            "moic_distribution": result.get("moic_outcomes", []),
+            "moic_distribution": moic_outcomes,
+            "tvpi_distribution": tvpi_outcomes,
         }
 
     except Exception as e:
@@ -387,6 +428,13 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
             # Run simulation
             result = experiment.run_montecarlo(config)
             if result:
+                # Compute TVPI distribution
+                moic_outcomes = result.get("moic_outcomes", [])
+                adjusted_fund_size = config_dict["fund_size"]
+                committed_capital = config_dict["committed_capital"]
+                tvpi_factor = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
+                tvpi_outcomes = [m * tvpi_factor for m in moic_outcomes]
+
                 # Transform backend result format to frontend format
                 transformed_results = {
                     "mean_moic": result.get("total_MOIC", 0),
@@ -403,16 +451,23 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
                     "total_value_invested": result.get("fund_size", 0),
                     "total_value_returned": result.get("total_value_acquired", 0) + result.get("total_value_alive", 0),
                     "fund_size": result.get("fund_size", 0),
+                    "committed_capital": committed_capital,
                     "avg_primary_invested": result.get("avg_primary_invested", 0),
                     "avg_follow_on_invested": result.get("avg_follow_on_invested", 0),
                     "portfolio_breakdown": result.get("portfolio_breakdown", {}),
+                    "mean_tvpi": float(np.mean(tvpi_outcomes)) if tvpi_outcomes else 0,
+                    "median_tvpi": float(np.percentile(tvpi_outcomes, 50)) if tvpi_outcomes else 0,
+                    "p25_tvpi": float(np.percentile(tvpi_outcomes, 25)) if tvpi_outcomes else 0,
+                    "p75_tvpi": float(np.percentile(tvpi_outcomes, 75)) if tvpi_outcomes else 0,
+                    "p90_tvpi": float(np.percentile(tvpi_outcomes, 90)) if tvpi_outcomes else 0,
                 }
 
                 all_results.append({
                     "name": sim_request.name,
                     "config": sim_request.config.dict(),
                     "results": transformed_results,
-                    "moic_distribution": result.get("moic_outcomes", []),
+                    "moic_distribution": moic_outcomes,
+                    "tvpi_distribution": tvpi_outcomes,
                 })
 
         if not all_results:

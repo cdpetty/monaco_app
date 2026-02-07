@@ -2,6 +2,9 @@
 
 export interface SimulationConfig {
   fund_size_m: number;
+  management_fee_pct: number;
+  fee_duration_years: number;
+  recycled_capital_pct: number;
   capital_per_company: number;
   deploy_percentage: number;
   check_sizes_at_entry: Record<string, number>;

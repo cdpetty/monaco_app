@@ -2,18 +2,52 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = `http://${window.location.hostname}:8000`;
 
-const PRESEED_VALUATION = 15; // $M
-const SEED_VALUATION = 30;   // $M
+const ENTRY_STAGES = ['Pre-seed', 'Seed', 'Series A', 'Series B'];
+
+const DEFAULT_STAGE_VALUATIONS = {
+  'Pre-seed': 15, 'Seed': 30, 'Series A': 70, 'Series B': 200,
+  'Series C': 500, 'Series D': 750, 'Series E': 1500,
+  'Series F': 5000, 'Series G': 10000,
+};
+
+function getStageValuations() {
+  try {
+    const stored = localStorage.getItem('monaco_custom_stage_valuations');
+    if (stored) return { ...DEFAULT_STAGE_VALUATIONS, ...JSON.parse(stored) };
+  } catch (e) {}
+  return DEFAULT_STAGE_VALUATIONS;
+}
 
 const DEFAULT_CONFIG = {
   fund_size_m: 50,
+  management_fee_pct: 2,
+  fee_duration_years: 10,
+  recycled_capital_pct: 20,
   dry_powder_reserve_for_pro_rata: 30,
   reinvest_unused_reserve: true,
   pro_rata_max_valuation: 70,
-  preseed_pct: 100,
-  preseed_check_size: 1.5,
-  seed_check_size: 2.0,
+  stage_allocations: {
+    'Pre-seed': { pct: 60, check_size: 1.5 },
+    'Seed':     { pct: 40, check_size: 2.0 },
+    'Series A': { pct: 0,  check_size: 5.0 },
+    'Series B': { pct: 0,  check_size: 10.0 },
+  },
 };
+
+function migrateConfig(config) {
+  if (config.stage_allocations) return config;
+  const { preseed_pct, preseed_check_size, seed_check_size, ...rest } = config;
+  const pp = preseed_pct ?? 100;
+  return {
+    ...rest,
+    stage_allocations: {
+      'Pre-seed': { pct: pp, check_size: preseed_check_size ?? 1.5 },
+      'Seed':     { pct: 100 - pp, check_size: seed_check_size ?? 2.0 },
+      'Series A': { pct: 0,  check_size: 5.0 },
+      'Series B': { pct: 0,  check_size: 10.0 },
+    },
+  };
+}
 
 const FUND_NAMES = ['Fund A', 'Fund B', 'Fund C', 'Fund D'];
 
@@ -261,70 +295,63 @@ const FundTabs = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund }
   </div>
 );
 
-const StageAllocationControl = ({ preseedPct, onPreseedPctChange, preseedCheck, onPreseedCheckChange, seedCheck, onSeedCheckChange }) => {
-  const seedPct = 100 - preseedPct;
-  const preseedOwnership = ((preseedCheck / PRESEED_VALUATION) * 100).toFixed(1);
-  const seedOwnership = ((seedCheck / SEED_VALUATION) * 100).toFixed(1);
+const StageAllocationControl = ({ stageAllocations, onStageAllocationsChange }) => {
+  const valuations = getStageValuations();
+  const totalPct = ENTRY_STAGES.reduce((sum, s) => sum + (stageAllocations[s]?.pct || 0), 0);
+
+  const updateStage = (stage, field, value) => {
+    const updated = {};
+    for (const s of ENTRY_STAGES) {
+      updated[s] = { ...(stageAllocations[s] || { pct: 0, check_size: 1 }) };
+    }
+    updated[stage] = { ...updated[stage], [field]: value };
+    onStageAllocationsChange(updated);
+  };
 
   return (
-    <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
-      {/* Stage split slider */}
-      <label style={{ fontSize: '11px', color: DIM }}>STAGE ALLOCATION</label>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: MONO, fontSize: '11px' }}>
-        <span>Pre-seed <span style={{ color: '#ffffff' }}>{preseedPct}%</span></span>
-        <span>Seed <span style={{ color: '#ffffff' }}>{seedPct}%</span></span>
+    <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+        <label style={{ fontSize: '11px', color: DIM }}>STAGE ALLOCATION</label>
+        <span style={{ fontFamily: MONO, fontSize: '10px', color: totalPct === 100 ? 'rgba(255,255,255,0.4)' : '#ff6666' }}>
+          {totalPct}%{totalPct !== 100 ? ' (must = 100%)' : ''}
+        </span>
       </div>
-      <div style={{ position: 'relative', height: '24px', display: 'flex', alignItems: 'center' }}>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={preseedPct}
-          onChange={(e) => onPreseedPctChange(parseFloat(e.target.value))}
-          style={{ WebkitAppearance: 'none', width: '100%', background: 'transparent', position: 'relative', zIndex: 2 }}
-        />
-        <div style={customStyles.rangeTrackRuler}></div>
-      </div>
-
-      {/* Check sizes with implied ownership */}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        {/* Pre-seed check */}
-        <div style={{ flex: 1, opacity: preseedPct === 0 ? 0.3 : 1 }}>
-          <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '4px' }}>PRE-SEED CHECK ($M)</label>
-          <input
-            type="number"
-            value={preseedCheck}
-            min={0.1}
-            max={10}
-            step={0.25}
-            disabled={preseedPct === 0}
-            onChange={(e) => onPreseedCheckChange(parseFloat(e.target.value) || 0.1)}
-            style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-          />
-          <div style={{ fontFamily: MONO, fontSize: '10px', color: DIM, marginTop: '3px' }}>
-            → <span style={{ color: '#ffffff' }}>{preseedOwnership}%</span> own @ ${PRESEED_VALUATION}M val
+      {ENTRY_STAGES.map((stage) => {
+        const alloc = stageAllocations[stage] || { pct: 0, check_size: 1 };
+        const val = valuations[stage] || 1;
+        const ownership = ((alloc.check_size / val) * 100).toFixed(1);
+        const isActive = alloc.pct > 0;
+        return (
+          <div key={stage} style={{ opacity: isActive ? 1 : 0.3, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM, width: '60px', flexShrink: 0 }}>{stage.toUpperCase().replace('SERIES ', 'Ser ')}</span>
+              <input
+                type="number"
+                value={alloc.pct}
+                min={0} max={100} step={5}
+                onChange={(e) => updateStage(stage, 'pct', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#ffffff', padding: '3px 4px', fontFamily: MONO, fontSize: '11px', width: '44px', textAlign: 'right', outline: 'none' }}
+              />
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM }}>%</span>
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM, marginLeft: '4px' }}>$</span>
+              <input
+                type="number"
+                value={alloc.check_size}
+                min={0.1} max={50} step={0.25}
+                disabled={!isActive}
+                onChange={(e) => updateStage(stage, 'check_size', parseFloat(e.target.value) || 0.1)}
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#ffffff', padding: '3px 4px', fontFamily: MONO, fontSize: '11px', width: '50px', textAlign: 'right', outline: 'none' }}
+              />
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM }}>M</span>
+            </div>
+            {isActive && (
+              <div style={{ fontFamily: MONO, fontSize: '9px', color: DIM, marginTop: '2px', marginLeft: '68px' }}>
+                {ownership}% own @ ${val}M val
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* Seed check */}
-        <div style={{ flex: 1, opacity: seedPct === 0 ? 0.3 : 1 }}>
-          <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '4px' }}>SEED CHECK ($M)</label>
-          <input
-            type="number"
-            value={seedCheck}
-            min={0.1}
-            max={20}
-            step={0.25}
-            disabled={seedPct === 0}
-            onChange={(e) => onSeedCheckChange(parseFloat(e.target.value) || 0.1)}
-            style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-          />
-          <div style={{ fontFamily: MONO, fontSize: '10px', color: DIM, marginTop: '3px' }}>
-            → <span style={{ color: '#ffffff' }}>{seedOwnership}%</span> own @ ${SEED_VALUATION}M val
-          </div>
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 };
@@ -373,31 +400,17 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
           onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = DIM; }}
         >EDIT RATES &gt;</a>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>PERIODS</label>
-            <input
-              type="number"
-              value={numPeriods}
-              min={1}
-              max={20}
-              step={1}
-              onChange={(e) => onNumPeriodsChange(parseInt(e.target.value) || 1)}
-              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>ITERATIONS</label>
-            <input
-              type="number"
-              value={numIterations}
-              min={100}
-              max={10000}
-              step={500}
-              onChange={(e) => onNumIterationsChange(parseInt(e.target.value) || 100)}
-              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-            />
-          </div>
+        <div>
+          <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>ITERATIONS</label>
+          <input
+            type="number"
+            value={numIterations}
+            min={100}
+            max={10000}
+            step={500}
+            onChange={(e) => onNumIterationsChange(parseInt(e.target.value) || 100)}
+            style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
+          />
         </div>
       </div>
 
@@ -410,7 +423,7 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
       />
 
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <SectionHeader number="01" label="Fund Topology" />
+        <SectionHeader number="01" label="Fund Structure" />
 
         <NumberControl
           label="FUND SIZE ($M)"
@@ -421,12 +434,63 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
           step={10}
         />
 
+        <div style={{ display: 'flex', gap: '8px', padding: '8px 16px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>MGMT FEE (% / YR)</label>
+            <input
+              type="number"
+              value={config.management_fee_pct}
+              min={0}
+              max={10}
+              step={0.5}
+              onChange={(e) => setField('management_fee_pct', parseFloat(e.target.value) || 0)}
+              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>FEE DURATION (YRS)</label>
+            <input
+              type="number"
+              value={config.fee_duration_years}
+              min={0}
+              max={20}
+              step={1}
+              onChange={(e) => setField('fee_duration_years', parseInt(e.target.value) || 0)}
+              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
+            />
+          </div>
+        </div>
+
+        <SliderControl
+          label="RECYCLED CAPITAL"
+          value={config.recycled_capital_pct}
+          onChange={(v) => setField('recycled_capital_pct', v)}
+          min={0}
+          max={100}
+          step={5}
+          suffix="% of fund"
+        />
+
+        {(() => {
+          const fs = config.fund_size_m || 0;
+          const fees = fs * ((config.management_fee_pct ?? 2) / 100) * (config.fee_duration_years ?? 10);
+          const recycled = fs * ((config.recycled_capital_pct ?? 20) / 100);
+          const deployed = fs - fees + recycled;
+          return (
+            <div style={{ padding: '6px 16px 8px', fontFamily: MONO, fontSize: '10px', color: DIM, borderBottom: BORDER_DIM }}>
+              ${fs}M - ${fees.toFixed(1)}M fees + ${recycled.toFixed(1)}M recycled = <span style={{ color: '#ffffff' }}>${deployed.toFixed(1)}M</span> deployed
+            </div>
+          );
+        })()}
+
+        <SectionHeader number="02" label="Portfolio Investments" />
+
         <SliderControl
           label="FOLLOW-ON RESERVE"
           value={config.dry_powder_reserve_for_pro_rata}
           onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)}
           min={0}
-          max={80}
+          max={70}
           step={5}
           suffix="% of fund"
         />
@@ -444,17 +508,6 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
           </label>
         </div>
 
-        <SectionHeader number="02" label="Stage & Check Size" />
-
-        <StageAllocationControl
-          preseedPct={config.preseed_pct}
-          onPreseedPctChange={(v) => setField('preseed_pct', v)}
-          preseedCheck={config.preseed_check_size}
-          onPreseedCheckChange={(v) => setField('preseed_check_size', v)}
-          seedCheck={config.seed_check_size}
-          onSeedCheckChange={(v) => setField('seed_check_size', v)}
-        />
-
         <NumberControl
           label="PRO-RATA MAX VALUATION ($M)"
           value={config.pro_rata_max_valuation}
@@ -462,6 +515,11 @@ const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, o
           min={0}
           max={10000}
           step={10}
+        />
+
+        <StageAllocationControl
+          stageAllocations={config.stage_allocations}
+          onStageAllocationsChange={(v) => setField('stage_allocations', v)}
         />
       </div>
     </aside>
@@ -906,7 +964,8 @@ const KeyMetrics = ({ funds, fundResults }) => {
     .map((f, i) => {
       const r = fundResults[f.id];
       const p95 = computeP95(r.moic_distribution);
-      return { name: f.name, results: { ...r.results, p95_moic: p95 != null ? p95 : r.results.p90_moic }, color: FUND_COLORS[funds.indexOf(f) % FUND_COLORS.length] };
+      const p95_tvpi = computeP95(r.tvpi_distribution);
+      return { name: f.name, results: { ...r.results, p95_moic: p95 != null ? p95 : r.results.p90_moic, p95_tvpi: p95_tvpi != null ? p95_tvpi : r.results.p90_tvpi }, color: FUND_COLORS[funds.indexOf(f) % FUND_COLORS.length] };
     });
 
   const fmt = (v, decimals = 2) => v != null ? v.toFixed(decimals) : '-';
@@ -935,24 +994,40 @@ const KeyMetrics = ({ funds, fundResults }) => {
             </thead>
             <tbody>
               {[
+                { key: 'p95_tvpi', label: 'P95 TVPI', suffix: 'x' },
+                { key: 'p90_tvpi', label: 'P90 TVPI', suffix: 'x' },
+                { key: 'p75_tvpi', label: 'P75 TVPI', suffix: 'x' },
+                { key: 'median_tvpi', label: 'P50 TVPI', suffix: 'x' },
+                { key: 'p25_tvpi', label: 'P25 TVPI', suffix: 'x' },
+                { key: '_separator_1', label: '', separator: true },
                 { key: 'p95_moic', label: 'P95 MOIC', suffix: 'x' },
                 { key: 'p90_moic', label: 'P90 MOIC', suffix: 'x' },
                 { key: 'p75_moic', label: 'P75 MOIC', suffix: 'x' },
                 { key: 'median_moic', label: 'P50 MOIC', suffix: 'x' },
                 { key: 'p25_moic', label: 'P25 MOIC', suffix: 'x' },
-                { key: 'fund_size', label: 'FUND SIZE', suffix: 'M', prefix: '$', decimals: 0 },
+                { key: '_separator_2', label: '', separator: true },
+                { key: 'committed_capital', label: 'COMMITTED CAPITAL', suffix: 'M', prefix: '$', decimals: 0 },
+                { key: 'fund_size', label: 'INVESTED CAPITAL', suffix: 'M', prefix: '$', decimals: 0 },
                 { key: 'avg_primary_invested', label: 'PRIMARY INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
                 { key: 'avg_follow_on_invested', label: 'PRO RATA INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
                 { key: 'avg_total_companies', label: 'AVG PORTFOLIO SIZE', suffix: '', decimals: 1 },
               ].map((row, ri, arr) => (
-                <tr key={row.key}>
-                  <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: '#ffffff' }}>{row.label}</td>
-                  {allResults.map((sim, si) => (
-                    <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: sim.color.main }}>
-                      {row.prefix || ''}{fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
+                row.separator ? (
+                  <tr key={row.key}>
+                    <td colSpan={1 + allResults.length} style={{ padding: '2px 0', borderBottom: 'none' }}>
+                      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.15)', margin: '2px 0' }} />
                     </td>
-                  ))}
-                </tr>
+                  </tr>
+                ) : (
+                  <tr key={row.key}>
+                    <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: '#ffffff' }}>{row.label}</td>
+                    {allResults.map((sim, si) => (
+                      <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: sim.color.main }}>
+                        {row.prefix || ''}{fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
+                      </td>
+                    ))}
+                  </tr>
+                )
               ))}
             </tbody>
           </table>
@@ -981,7 +1056,7 @@ const App = () => {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           nextFundId = Math.max(...parsed.map(f => f.id)) + 1;
-          return parsed;
+          return parsed.map(f => ({ ...f, config: migrateConfig(f.config) }));
         }
       } catch (e) {}
     }
@@ -1073,7 +1148,11 @@ const App = () => {
     const usedNames = new Set(funds.map((f) => f.name));
     const name = FUND_NAMES.find((n) => !usedNames.has(n)) || `Fund ${nextFundId}`;
     const source = funds.find((f) => f.id === activeFundId) || funds[funds.length - 1];
-    const newFund = { id: nextFundId++, name, config: { ...source.config } };
+    const clonedAllocations = {};
+    for (const [k, v] of Object.entries(source.config.stage_allocations || {})) {
+      clonedAllocations[k] = { ...v };
+    }
+    const newFund = { id: nextFundId++, name, config: { ...source.config, stage_allocations: clonedAllocations } };
     setFunds((prev) => [...prev, newFund]);
     setActiveFundId(newFund.id);
   }, [funds, activeFundId]);
@@ -1110,24 +1189,26 @@ const App = () => {
       const storedVals = localStorage.getItem('monaco_custom_stage_valuations');
       const customValuations = storedVals ? JSON.parse(storedVals) : null;
       const simulations = funds.map((f) => {
-        const { preseed_pct, preseed_check_size, seed_check_size, ...rest } = f.config;
+        const { stage_allocations, ...rest } = f.config;
+        const valuations = getStageValuations();
         const checkSizes = {};
         const ownershipPcts = {};
-        if (preseed_pct > 0) {
-          checkSizes['Pre-seed'] = preseed_check_size;
-          ownershipPcts['Pre-seed'] = preseed_check_size / PRESEED_VALUATION;
-        }
-        if (preseed_pct < 100) {
-          checkSizes['Seed'] = seed_check_size;
-          ownershipPcts['Seed'] = seed_check_size / SEED_VALUATION;
+        const allocationPcts = {};
+        for (const [stage, alloc] of Object.entries(stage_allocations || {})) {
+          if (alloc.pct > 0) {
+            checkSizes[stage] = alloc.check_size;
+            ownershipPcts[stage] = alloc.check_size / (valuations[stage] || 1);
+            allocationPcts[stage] = alloc.pct;
+          }
         }
         const cfg = {
           ...rest,
           market_scenario: marketScenario,
-          num_periods: numPeriods,
+          num_periods: 8,
           num_iterations: numIterations,
           check_sizes_at_entry: checkSizes,
           ownership_percentages_at_entry: ownershipPcts,
+          stage_allocation_pcts: allocationPcts,
         };
         if (customRates && customRates[marketScenario]) {
           cfg.graduation_rates = customRates[marketScenario];

@@ -42,6 +42,46 @@ const ParameterControls: React.FC<ParameterControlsProps> = ({ config, onChange 
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="management_fee_pct">Management Fee (%)</Label>
+          <Input
+            id="management_fee_pct"
+            type="number"
+            value={config.management_fee_pct ?? 2}
+            onChange={(e) => handleChange('management_fee_pct', parseFloat(e.target.value))}
+            step={0.5}
+            min={0}
+            max={10}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="fee_duration_years">Fee Duration (Years)</Label>
+          <Input
+            id="fee_duration_years"
+            type="number"
+            value={config.fee_duration_years ?? 10}
+            onChange={(e) => handleChange('fee_duration_years', parseInt(e.target.value))}
+            step={1}
+            min={0}
+            max={20}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="recycled_capital_pct">Recycled Capital (%)</Label>
+          <Input
+            id="recycled_capital_pct"
+            type="number"
+            value={config.recycled_capital_pct ?? 20}
+            onChange={(e) => handleChange('recycled_capital_pct', parseFloat(e.target.value))}
+            step={5}
+            min={0}
+            max={100}
+          />
+          <p className="text-xs text-muted-foreground">% of fund size added back as available capital</p>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="deploy_percentage">Deploy Percentage (%)</Label>
           <Input
             id="deploy_percentage"

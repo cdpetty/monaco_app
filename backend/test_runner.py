@@ -833,6 +833,7 @@ def test_api_ownership_sanity():
     try:
         frontend = _make_frontend_config(num_iterations=1)
         backend = convert_frontend_config_to_backend(frontend)
+        backend.pop('committed_capital', None)
         mc_config = Montecarlo_Sim_Configuration(**backend)
         mc = Montecarlo(mc_config)
         mc.initialize_scenarios()
@@ -883,6 +884,7 @@ def test_api_moic_matches_direct():
             num_iterations=500,
         )
         api_backend = convert_frontend_config_to_backend(frontend)
+        api_backend.pop('committed_capital', None)
         api_config = Montecarlo_Sim_Configuration(**api_backend)
         api_mc = Montecarlo(api_config)
         api_mc.initialize_scenarios()
@@ -1392,6 +1394,305 @@ def test_seed_only_fund_structure():
 
 
 # ---------------------------------------------------------------------------
+# Fees & recycling tests
+# ---------------------------------------------------------------------------
+
+def test_default_fees_and_recycling_cancel_out():
+    """With default 2% fee x 10 yrs and 20% recycling, available capital equals committed capital."""
+    try:
+        frontend = _make_frontend_config(
+            fund_size_m=200,
+            management_fee_pct=2,
+            fee_duration_years=10,
+            recycled_capital_pct=20,
+        )
+        backend = convert_frontend_config_to_backend(frontend)
+
+        # 2% * 10 = 20% fees, 20% recycling → net effect = 0
+        # available = 200 - (200 * 0.02 * 10) + (200 * 0.20) = 200 - 40 + 40 = 200
+        fund_size = backend['fund_size']
+        passed = approx(fund_size, 200)
+
+        return dict(
+            id='default_fees_recycling_cancel',
+            name='Default Fees & Recycling Cancel Out',
+            category='fees_recycling',
+            description=(
+                'With default parameters (2% annual fee × 10 years = 20% total fees, '
+                '20% recycled capital), the two effects cancel out. '
+                'Available capital = $200M - $40M fees + $40M recycled = $200M.'
+            ),
+            expected='fund_size = $200M (fees and recycling cancel)',
+            actual=f'fund_size = ${fund_size:.2f}M',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='default_fees_recycling_cancel', name='Default Fees & Recycling Cancel Out',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_fees_reduce_available_capital():
+    """Management fees reduce the capital available for investment."""
+    try:
+        frontend = _make_frontend_config(
+            fund_size_m=200,
+            management_fee_pct=2,
+            fee_duration_years=10,
+            recycled_capital_pct=0,
+        )
+        backend = convert_frontend_config_to_backend(frontend)
+
+        # fees = 200 * 0.02 * 10 = 40, recycled = 0
+        # available = 200 - 40 + 0 = 160
+        fund_size = backend['fund_size']
+        expected = 160
+        passed = approx(fund_size, expected)
+
+        return dict(
+            id='fees_reduce_capital',
+            name='Fees Reduce Available Capital',
+            category='fees_recycling',
+            description=(
+                'A $200M fund with 2% annual fee for 10 years and 0% recycling. '
+                'Total fees = $200M × 2% × 10 = $40M. '
+                'Available capital = $200M - $40M = $160M.'
+            ),
+            expected=f'fund_size = ${expected}M',
+            actual=f'fund_size = ${fund_size:.2f}M',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='fees_reduce_capital', name='Fees Reduce Available Capital',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_recycling_increases_available_capital():
+    """Recycled capital adds back to available investment capital."""
+    try:
+        frontend = _make_frontend_config(
+            fund_size_m=200,
+            management_fee_pct=0,
+            fee_duration_years=10,
+            recycled_capital_pct=25,
+        )
+        backend = convert_frontend_config_to_backend(frontend)
+
+        # fees = 0, recycled = 200 * 0.25 = 50
+        # available = 200 - 0 + 50 = 250
+        fund_size = backend['fund_size']
+        expected = 250
+        passed = approx(fund_size, expected)
+
+        return dict(
+            id='recycling_increases_capital',
+            name='Recycling Increases Available Capital',
+            category='fees_recycling',
+            description=(
+                'A $200M fund with 0% fees and 25% recycled capital. '
+                'Recycled = $200M × 25% = $50M. '
+                'Available capital = $200M + $50M = $250M.'
+            ),
+            expected=f'fund_size = ${expected}M',
+            actual=f'fund_size = ${fund_size:.2f}M',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='recycling_increases_capital', name='Recycling Increases Available Capital',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_zero_fees_zero_recycling():
+    """With 0% fees and 0% recycling, available capital equals committed capital."""
+    try:
+        frontend = _make_frontend_config(
+            fund_size_m=200,
+            management_fee_pct=0,
+            fee_duration_years=0,
+            recycled_capital_pct=0,
+        )
+        backend = convert_frontend_config_to_backend(frontend)
+
+        fund_size = backend['fund_size']
+        passed = approx(fund_size, 200)
+
+        return dict(
+            id='zero_fees_zero_recycling',
+            name='Zero Fees & Zero Recycling',
+            category='fees_recycling',
+            description=(
+                'Edge case: 0% management fee, 0 years, 0% recycling. '
+                'Available capital should equal committed capital ($200M).'
+            ),
+            expected='fund_size = $200M',
+            actual=f'fund_size = ${fund_size:.2f}M',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='zero_fees_zero_recycling', name='Zero Fees & Zero Recycling',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_fees_recycling_budget_identity():
+    """Budget identity holds: sum(primary) + follow_on == adjusted fund_size."""
+    try:
+        frontend = _make_frontend_config(
+            fund_size_m=200,
+            management_fee_pct=3,
+            fee_duration_years=10,
+            recycled_capital_pct=15,
+            dry_powder_reserve_for_pro_rata=20,
+            check_sizes_at_entry={'Pre-seed': 1.5, 'Seed': 3.0},
+        )
+        backend = convert_frontend_config_to_backend(frontend)
+
+        fund_size = backend['fund_size']
+        follow_on = backend['follow_on_reserve']
+        primary_total = sum(backend['primary_investments'].values())
+        budget = primary_total + follow_on
+
+        # Expected: fees = 200 * 0.03 * 10 = 60, recycled = 200 * 0.15 = 30
+        # available = 200 - 60 + 30 = 170
+        expected_fund = 170
+        fund_ok = approx(fund_size, expected_fund)
+        budget_ok = approx(budget, fund_size)
+        passed = fund_ok and budget_ok
+
+        return dict(
+            id='fees_recycling_budget_identity',
+            name='Fees/Recycling Budget Identity',
+            category='fees_recycling',
+            description=(
+                'A $200M fund with 3% fee × 10 yrs ($60M fees) and 15% recycling ($30M). '
+                'Available capital = $200M - $60M + $30M = $170M. '
+                'Budget identity: sum(primary_investments) + follow_on_reserve must equal $170M.'
+            ),
+            expected=f'fund_size = ${expected_fund}M, primary + follow_on = fund_size',
+            actual=f'fund_size = ${fund_size:.2f}M, primary={primary_total:.2f} + follow_on={follow_on:.2f} = {budget:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='fees_recycling_budget_identity', name='Fees/Recycling Budget Identity',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_high_fees_reduce_company_count():
+    """Higher fees produce fewer companies due to less available capital."""
+    try:
+        exp = Experiment()
+
+        # No fees → $200M available
+        fe_no_fees = _make_frontend_config(
+            fund_size_m=200, management_fee_pct=0, fee_duration_years=10,
+            recycled_capital_pct=0, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_no = convert_frontend_config_to_backend(fe_no_fees)
+        cfg_no = exp.create_montecarlo_sim_configuration(d_no)
+        result_no = exp.run_montecarlo(cfg_no)
+        avg_no = result_no['avg_portfolio_size']
+
+        # 3% fee × 10 yrs = 30% fees → $200M - $60M = $140M available
+        fe_high_fees = _make_frontend_config(
+            fund_size_m=200, management_fee_pct=3, fee_duration_years=10,
+            recycled_capital_pct=0, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_high = convert_frontend_config_to_backend(fe_high_fees)
+        cfg_high = exp.create_montecarlo_sim_configuration(d_high)
+        result_high = exp.run_montecarlo(cfg_high)
+        avg_high = result_high['avg_portfolio_size']
+
+        # No fees: 200*0.99/1.5 ≈ 132, High fees: 140*0.99/1.5 ≈ 92
+        # Ratio should be ~1.43
+        ratio = avg_no / avg_high if avg_high > 0 else 999
+        passed = avg_no > avg_high and ratio > 1.3
+
+        return dict(
+            id='high_fees_reduce_companies',
+            name='Higher Fees → Fewer Companies',
+            category='fees_recycling',
+            description=(
+                'A fund with 3% annual fees (30% total over 10 years) should produce '
+                'significantly fewer companies than a fund with 0% fees. '
+                '0% fees: $200M available, 3% fees: $140M available.'
+            ),
+            expected=f'0% fees companies > 3% fees companies (ratio > 1.3)',
+            actual=f'0% fees={avg_no:.1f} cos, 3% fees={avg_high:.1f} cos, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='high_fees_reduce_companies', name='Higher Fees → Fewer Companies',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_high_recycling_increases_company_count():
+    """Higher recycling produces more companies due to more available capital."""
+    try:
+        exp = Experiment()
+
+        # 0% recycling
+        fe_no_recycling = _make_frontend_config(
+            fund_size_m=200, management_fee_pct=0, fee_duration_years=10,
+            recycled_capital_pct=0, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_no = convert_frontend_config_to_backend(fe_no_recycling)
+        cfg_no = exp.create_montecarlo_sim_configuration(d_no)
+        result_no = exp.run_montecarlo(cfg_no)
+        avg_no = result_no['avg_portfolio_size']
+
+        # 30% recycling → $200M + $60M = $260M available
+        fe_high_recycling = _make_frontend_config(
+            fund_size_m=200, management_fee_pct=0, fee_duration_years=10,
+            recycled_capital_pct=30, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_high = convert_frontend_config_to_backend(fe_high_recycling)
+        cfg_high = exp.create_montecarlo_sim_configuration(d_high)
+        result_high = exp.run_montecarlo(cfg_high)
+        avg_high = result_high['avg_portfolio_size']
+
+        # 0% recycling: 200*0.99/1.5 ≈ 132, 30% recycling: 260*0.99/1.5 ≈ 171
+        ratio = avg_high / avg_no if avg_no > 0 else 0
+        passed = avg_high > avg_no and ratio > 1.2
+
+        return dict(
+            id='high_recycling_increases_companies',
+            name='Higher Recycling → More Companies',
+            category='fees_recycling',
+            description=(
+                'A fund with 30% recycled capital should produce more companies '
+                'than a fund with 0% recycling. '
+                '0% recycling: $200M available, 30% recycling: $260M available.'
+            ),
+            expected=f'30% recycling companies > 0% recycling companies (ratio > 1.2)',
+            actual=f'0% recycling={avg_no:.1f} cos, 30% recycling={avg_high:.1f} cos, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='high_recycling_increases_companies', name='Higher Recycling → More Companies',
+                    category='fees_recycling', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1425,6 +1726,13 @@ def run_all_tests() -> List[Dict[str, Any]]:
         test_multi_stage_split,
         test_reserve_reduces_initial_companies,
         test_seed_only_fund_structure,
+        test_default_fees_and_recycling_cancel_out,
+        test_fees_reduce_available_capital,
+        test_recycling_increases_available_capital,
+        test_zero_fees_zero_recycling,
+        test_fees_recycling_budget_identity,
+        test_high_fees_reduce_company_count,
+        test_high_recycling_increases_company_count,
     ]
     results = []
     for t in tests:

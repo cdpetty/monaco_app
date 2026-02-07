@@ -247,24 +247,22 @@ class Experiment:
         result['follow_on_reserve'] = config.follow_on_reserve
         result['pro_rata_at_or_below'] = config.pro_rata_at_or_below
 
-        # Investment amounts and totals
-        for stage in ['Pre-seed', 'Seed']:
-            result[f'{stage}_investment_amount'] = config.initial_investment_sizes.get(stage, 0)
-            result[f'{stage}_total_invested'] = config.primary_investments.get(stage, 0)
-
-        # Ownership calculations
+        # Investment amounts, totals, and ownership calculations
         total_ownership = 0
         total_companies = 0
-        for stage in ['Pre-seed', 'Seed']:
-            if stage in config.primary_investments and stage in config.stage_valuations:
+        for stage in config.primary_investments.keys():
+            result[f'{stage}_investment_amount'] = config.initial_investment_sizes.get(stage, 0)
+            result[f'{stage}_total_invested'] = config.primary_investments.get(stage, 0)
+            if stage in config.stage_valuations and stage in config.initial_investment_sizes:
                 amount = config.initial_investment_sizes[stage]
                 valuation = config.stage_valuations[stage]
-                ownership = (amount / valuation) * 100
-                num_companies = config.primary_investments[stage] / amount
-                result[f'{stage}_avg_ownership'] = ownership
-                result[f'{stage}_avg_companies'] = num_companies
-                total_ownership += ownership * num_companies
-                total_companies += num_companies
+                if amount > 0 and valuation > 0:
+                    ownership = (amount / valuation) * 100
+                    num_companies = config.primary_investments[stage] / amount
+                    result[f'{stage}_avg_ownership'] = ownership
+                    result[f'{stage}_avg_companies'] = num_companies
+                    total_ownership += ownership * num_companies
+                    total_companies += num_companies
 
         result['overall_avg_ownership'] = total_ownership / total_companies if total_companies > 0 else 0
         result['total_portfolio_companies'] = total_companies

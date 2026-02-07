@@ -15,6 +15,9 @@ import type {
 function App() {
   const [config, setConfig] = useState<Partial<SimulationConfig>>({
     fund_size_m: 50,
+    management_fee_pct: 2,
+    fee_duration_years: 10,
+    recycled_capital_pct: 20,
     capital_per_company: 10,
     deploy_percentage: 90,
     check_sizes_at_entry: {
