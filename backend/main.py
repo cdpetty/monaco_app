@@ -61,7 +61,7 @@ class SimulationConfig(BaseModel):
     graduation_rates: Optional[Dict[str, List[float]]] = Field(default=None, description="Custom graduation rates by stage")
     stage_valuations: Optional[Dict[str, float]] = Field(default=None, description="Custom stage valuations")
     num_companies_to_simulate: Optional[int] = Field(default=100, description="Number of companies")
-    num_iterations: Optional[int] = Field(default=3000, description="Number of iterations")
+    num_iterations: Optional[int] = Field(default=5000, description="Number of iterations")
     num_periods: Optional[int] = Field(default=8, description="Number of periods")
 
 
@@ -298,7 +298,7 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
         "follow_on_reserve": follow_on_reserve,
         "fund_size": fund_size,
         "pro_rata_at_or_below": pro_rata_at_or_below,
-        "num_scenarios": sim_config.num_iterations or 3000,
+        "num_scenarios": sim_config.num_iterations or 5000,
         "reinvest_unused_reserve": sim_config.reinvest_unused_reserve if sim_config.reinvest_unused_reserve is not None else True
     }
 
@@ -405,6 +405,7 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
                     "fund_size": result.get("fund_size", 0),
                     "avg_primary_invested": result.get("avg_primary_invested", 0),
                     "avg_follow_on_invested": result.get("avg_follow_on_invested", 0),
+                    "portfolio_breakdown": result.get("portfolio_breakdown", {}),
                 }
 
                 all_results.append({

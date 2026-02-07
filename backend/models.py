@@ -544,6 +544,80 @@ class Montecarlo:
             lengths.append(len(firm.portfolio))
         return sum(lengths) / len(lengths)
 
+    def _breakdown_for_firms(self, firms: List) -> Dict:
+        """Compute portfolio breakdown for a subset of firm scenarios."""
+        num = len(firms)
+        if num == 0:
+            return {'segments': []}
+
+        alive_by_stage = {}
+        acquired = {'count': 0, 'value': 0}
+        failed = {'count': 0, 'value': 0}
+
+        for firm in firms:
+            for co in firm.portfolio:
+                val = co.valuation * co.firm_ownership
+                if co.state == 'Alive':
+                    if co.stage not in alive_by_stage:
+                        alive_by_stage[co.stage] = {'count': 0, 'value': 0}
+                    alive_by_stage[co.stage]['count'] += 1
+                    alive_by_stage[co.stage]['value'] += val
+                elif co.state == 'Acquired':
+                    acquired['count'] += 1
+                    acquired['value'] += val
+                elif co.state == 'Failed':
+                    failed['count'] += 1
+                    failed['value'] += co.firm_invested_capital
+
+        stages_ordered = [s for s in self.stages if s in alive_by_stage]
+        breakdown = []
+        for stage in stages_ordered:
+            d = alive_by_stage[stage]
+            breakdown.append({
+                'label': stage, 'type': 'alive',
+                'count': round(d['count'] / num, 1),
+                'value': round(d['value'] / num, 2)
+            })
+        breakdown.append({
+            'label': 'Acquired', 'type': 'acquired',
+            'count': round(acquired['count'] / num, 1),
+            'value': round(acquired['value'] / num, 2)
+        })
+        breakdown.append({
+            'label': 'Failed', 'type': 'failed',
+            'count': round(failed['count'] / num, 1),
+            'value': round(failed['value'] / num, 2)
+        })
+
+        return {'segments': breakdown}
+
+    def get_portfolio_breakdown_by_percentile(self) -> Dict[str, Dict]:
+        """Get portfolio breakdown for scenarios near each percentile."""
+        num = len(self.firm_scenarios)
+        if num == 0:
+            return {}
+
+        # Sort scenarios by MOIC
+        sorted_firms = sorted(self.firm_scenarios, key=lambda f: f.get_MoM())
+
+        percentiles = {
+            'p25': 0.25, 'p50': 0.50, 'p75': 0.75, 'p90': 0.90, 'p95': 0.95
+        }
+
+        # Take ~5% of scenarios around each percentile (at least 5)
+        window = max(int(num * 0.05), 5)
+        half = window // 2
+
+        result = {}
+        for key, pct in percentiles.items():
+            idx = int(num * pct)
+            lo = max(0, idx - half)
+            hi = min(num, lo + window)
+            lo = max(0, hi - window)
+            result[key] = self._breakdown_for_firms(sorted_firms[lo:hi])
+
+        return result
+
     def get_individual_montecarlo_simulation_inputs_and_outputs(self) -> List[Dict]:
         """Get detailed results for each scenario."""
         results = []

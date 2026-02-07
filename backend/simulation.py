@@ -286,6 +286,8 @@ class Experiment:
         for stage in config.stages:
             result[f'{stage}_companies'] = stage_counter.get(stage, 0)
 
+        result['portfolio_breakdown'] = montecarlo.get_portfolio_breakdown_by_percentile()
+
         state_counter = montecarlo.get_total_companies_by_state()
         num_scenarios = len(montecarlo.firm_scenarios)
         result['Alive Companies'] = state_counter['Alive'] / num_scenarios if num_scenarios else 0

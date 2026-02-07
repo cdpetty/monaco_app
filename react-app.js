@@ -575,6 +575,8 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
     })
     .filter(Boolean);
 
+  const [tooltip, setTooltip] = useState(null);
+
   const hasData = fundData.length > 0;
   const allMax = hasData ? Math.max(...fundData.map((d) => d.p95)) : 10;
   const { ticks, axisMax } = generateTicks(allMax * 1.1);
@@ -754,7 +756,12 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
                     const isMedian = p.key === 'median_moic';
                     const dotColor = p.color || c.dim;
                     return (
-                      <g key={p.key}>
+                      <g key={p.key}
+                        onMouseEnter={(e) => setTooltip({ fundId: fund.id, pKey: p.key, x: e.clientX, y: e.clientY })}
+                        onMouseMove={(e) => setTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                        onMouseLeave={() => setTooltip(null)}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <circle
                           cx={cx}
                           cy={y}
@@ -763,6 +770,8 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
                           stroke={dotColor}
                           strokeWidth={p.filled ? 0 : 1.5}
                         />
+                        {/* Larger invisible hit area */}
+                        <circle cx={cx} cy={y} r={12} fill="transparent" />
                         {/* Value label to the right */}
                         <text
                           x={cx + (isMedian ? 12 : 10)}
@@ -784,6 +793,76 @@ const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
           </svg>
         )}
       </div>
+
+      {/* Hover tooltip with waterfall chart */}
+      {tooltip && (() => {
+        const res = fundResults[tooltip.fundId];
+        const allBreakdowns = res?.results?.portfolio_breakdown;
+        if (!allBreakdowns) return null;
+        // Map frontend percentile keys to backend keys
+        const pMap = { p25_moic: 'p25', median_moic: 'p50', p75_moic: 'p75', p90_moic: 'p90', p95_moic: 'p95' };
+        const bKey = pMap[tooltip.pKey] || 'p50';
+        const breakdown = allBreakdowns[bKey];
+        if (!breakdown || !breakdown.segments) return null;
+        const pLabel = bKey.toUpperCase();
+        const segments = breakdown.segments.filter((s) => s.value > 0 || s.type === 'failed');
+        if (segments.length === 0) return null;
+
+        const maxVal = Math.max(...segments.map((s) => s.value), 1);
+        const barW = 28;
+        const barGap = 6;
+        const chartW = segments.length * (barW + barGap) - barGap;
+        const chartH = 120;
+        const labelH = 48;
+        const topH = 18;
+        const svgW = chartW + 20;
+        const svgH = chartH + labelH + topH;
+
+        const segColor = (s) => s.type === 'acquired' ? '#4ade80' : s.type === 'failed' ? '#f87171' : '#ffffff';
+
+        return (
+          <div style={{
+            position: 'fixed',
+            left: tooltip.x + 20,
+            top: tooltip.y - svgH / 2,
+            zIndex: 1000,
+            background: '#000000',
+            border: '1px solid #ffffff',
+            padding: '10px 12px',
+            fontFamily: MONO,
+            fontSize: '9px',
+            pointerEvents: 'none',
+          }}>
+            <div style={{ color: '#ffffff', fontSize: '9px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {pLabel} PORTFOLIO BREAKDOWN
+            </div>
+            <svg width={svgW} height={svgH}>
+              {segments.map((seg, i) => {
+                const x = 10 + i * (barW + barGap);
+                const barH = maxVal > 0 ? (seg.value / maxVal) * chartH : 0;
+                const barY = topH + chartH - barH;
+                const col = segColor(seg);
+                return (
+                  <g key={i}>
+                    <rect x={x} y={barY} width={barW} height={Math.max(barH, 1)} fill={seg.type === 'failed' ? 'none' : col} stroke={col} strokeWidth="1" rx="1" opacity={seg.type === 'alive' ? 0.7 : 1} />
+                    <text x={x + barW / 2} y={barY - 3} fill={col} fontSize="7" fontFamily={MONO} textAnchor="middle" fontWeight="700">
+                      ${seg.value.toFixed(0)}M
+                    </text>
+                    <text x={x + barW / 2} y={topH + chartH + 12} fill={DIM} fontSize="7" fontFamily={MONO} textAnchor="middle">
+                      {seg.label.replace('Series ', 'S')}
+                    </text>
+                    <text x={x + barW / 2} y={topH + chartH + 24} fill={DIM} fontSize="6" fontFamily={MONO} textAnchor="middle">
+                      {seg.count.toFixed(1)} cos
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Baseline */}
+              <line x1={6} y1={topH + chartH} x2={svgW - 6} y2={topH + chartH} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+            </svg>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -925,7 +1004,7 @@ const App = () => {
     try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numPeriods || 8; } catch(e) { return 8; }
   });
   const [numIterations, setNumIterations] = useState(() => {
-    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 3000; } catch(e) { return 3000; }
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 5000; } catch(e) { return 5000; }
   });
   const [fundResults, setFundResults] = useState({});
   const [loading, setLoading] = useState(false);

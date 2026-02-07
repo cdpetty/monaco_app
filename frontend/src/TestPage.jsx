@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = `http://${window.location.hostname}:8000`;
 const MONO = "'Space Mono', 'Courier New', monospace";
 const DIM = 'rgba(255, 255, 255, 0.5)';
 const BORDER_DIM = '1px solid rgba(255, 255, 255, 0.3)';

@@ -1137,6 +1137,261 @@ def test_avg_company_counts_are_averages():
 
 
 # ---------------------------------------------------------------------------
+# Structural fund tests — verify portfolio construction for various fund configs
+# ---------------------------------------------------------------------------
+
+def test_check_size_halves_company_count():
+    """Doubling check size should halve the number of companies."""
+    try:
+        exp = Experiment()
+
+        # 100% Pre-seed, $1.5M checks, $200M fund, 1% reserve
+        # (0% reserve gets coerced to 30% by conversion layer, so use 1%)
+        fe_small = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_small = convert_frontend_config_to_backend(fe_small)
+        cfg_small = exp.create_montecarlo_sim_configuration(d_small)
+        result_small = exp.run_montecarlo(cfg_small)
+        avg_small = result_small['avg_portfolio_size']
+
+        # 100% Pre-seed, $3M checks, $200M fund, 1% reserve
+        fe_large = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 3.0},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_large = convert_frontend_config_to_backend(fe_large)
+        cfg_large = exp.create_montecarlo_sim_configuration(d_large)
+        result_large = exp.run_montecarlo(cfg_large)
+        avg_large = result_large['avg_portfolio_size']
+
+        # Expected: 198/1.5 = 132 vs 198/3 = 66 → ratio ≈ 2.0
+        ratio = avg_small / avg_large if avg_large > 0 else 999
+        passed = 1.8 < ratio < 2.2
+
+        return dict(
+            id='check_size_halves_count',
+            name='Double Check Size → Half Companies',
+            category='structural',
+            description=(
+                'A $200M fund with $1.5M checks should produce ~2x the companies '
+                'of the same fund with $3M checks (200/1.5=133 vs 200/3=66). '
+                'Both use 0% reserve and reinvest off to isolate the effect.'
+            ),
+            expected='ratio ≈ 2.0 (within 1.8–2.2)',
+            actual=f'$1.5M checks: {avg_small:.1f} cos, $3M checks: {avg_large:.1f} cos, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='check_size_halves_count', name='Double Check Size → Half Companies',
+                    category='structural', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_larger_fund_more_companies():
+    """A fund twice the size should produce roughly twice the companies."""
+    try:
+        exp = Experiment()
+
+        # $100M fund, 1% reserve
+        fe_100 = _make_frontend_config(
+            fund_size_m=100, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_100 = convert_frontend_config_to_backend(fe_100)
+        cfg_100 = exp.create_montecarlo_sim_configuration(d_100)
+        result_100 = exp.run_montecarlo(cfg_100)
+        avg_100 = result_100['avg_portfolio_size']
+
+        # $200M fund, 1% reserve
+        fe_200 = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_200 = convert_frontend_config_to_backend(fe_200)
+        cfg_200 = exp.create_montecarlo_sim_configuration(d_200)
+        result_200 = exp.run_montecarlo(cfg_200)
+        avg_200 = result_200['avg_portfolio_size']
+
+        ratio = avg_200 / avg_100 if avg_100 > 0 else 999
+        passed = 1.8 < ratio < 2.2
+
+        return dict(
+            id='larger_fund_more_companies',
+            name='2x Fund Size → 2x Companies',
+            category='structural',
+            description=(
+                'A $200M fund should produce ~2x the companies of a $100M fund '
+                'when both use the same $1.5M check size. '
+                '(200/1.5=133 vs 100/1.5=66). 0% reserve, reinvest off.'
+            ),
+            expected='ratio ≈ 2.0 (within 1.8–2.2)',
+            actual=f'$100M fund: {avg_100:.1f} cos, $200M fund: {avg_200:.1f} cos, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='larger_fund_more_companies', name='2x Fund Size → 2x Companies',
+                    category='structural', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_multi_stage_split():
+    """A 50/50 Pre-seed/Seed fund should invest in both stages."""
+    try:
+        exp = Experiment()
+
+        # Use 1% reserve (0% gets coerced to 30% by conversion layer)
+        fe = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Pre-seed': 1.5, 'Seed': 3.0},
+            reinvest_unused_reserve=False, num_iterations=1,
+        )
+        d = convert_frontend_config_to_backend(fe)
+        cfg = exp.create_montecarlo_sim_configuration(d)
+        mc = Montecarlo(cfg)
+        mc.initialize_scenarios()
+
+        firm = mc.firm_scenarios[0]
+        stages = {}
+        for co in firm.portfolio:
+            stages[co.stage] = stages.get(co.stage, 0) + 1
+
+        # $200M, 1% reserve → $198M primary, split 50/50 = $99M each
+        # Pre-seed: 99/1.5 = 66, Seed: 99/3 = 33
+        preseed_count = stages.get('Pre-seed', 0)
+        seed_count = stages.get('Seed', 0)
+        total = len(firm.portfolio)
+
+        preseed_ok = 60 <= preseed_count <= 70
+        seed_ok = 30 <= seed_count <= 35
+        total_ok = 90 <= total <= 105
+
+        passed = preseed_ok and seed_ok and total_ok
+
+        return dict(
+            id='multi_stage_split',
+            name='50/50 Multi-Stage Split',
+            category='structural',
+            description=(
+                'A $200M fund split 50/50 between Pre-seed ($1.5M checks) and Seed ($3M checks) '
+                'should create ~66 Pre-seed and ~33 Seed companies. '
+                '$100M/1.5=66 Pre-seed, $100M/3=33 Seed, total ~99.'
+            ),
+            expected='Pre-seed ≈ 66, Seed ≈ 33, total ≈ 99',
+            actual=f'Pre-seed={preseed_count}, Seed={seed_count}, total={total}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='multi_stage_split', name='50/50 Multi-Stage Split',
+                    category='structural', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_reserve_reduces_initial_companies():
+    """Higher reserve should mean fewer initial companies (reinvest off)."""
+    try:
+        exp = Experiment()
+
+        # 10% reserve
+        fe_10 = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=10,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_10 = convert_frontend_config_to_backend(fe_10)
+        cfg_10 = exp.create_montecarlo_sim_configuration(d_10)
+        result_10 = exp.run_montecarlo(cfg_10)
+        avg_10 = result_10['avg_portfolio_size']
+
+        # 50% reserve
+        fe_50 = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=50,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            reinvest_unused_reserve=False, num_iterations=100,
+        )
+        d_50 = convert_frontend_config_to_backend(fe_50)
+        cfg_50 = exp.create_montecarlo_sim_configuration(d_50)
+        result_50 = exp.run_montecarlo(cfg_50)
+        avg_50 = result_50['avg_portfolio_size']
+
+        # 10% reserve: 180/1.5 = 120 companies
+        # 50% reserve: 100/1.5 = 66 companies
+        # Ratio should be ~1.8x
+        ratio = avg_10 / avg_50 if avg_50 > 0 else 999
+        passed = avg_10 > avg_50 and 1.5 < ratio < 2.2
+
+        return dict(
+            id='reserve_reduces_initial_companies',
+            name='Higher Reserve → Fewer Companies (Reinvest Off)',
+            category='structural',
+            description=(
+                'With reinvest off, a 50% reserve fund deploys only half the primary capital, '
+                'so it should have fewer companies than a 10% reserve fund. '
+                '10% reserve: 180/1.5=120, 50% reserve: 100/1.5=66.'
+            ),
+            expected=f'10% reserve > 50% reserve, ratio ≈ 1.8',
+            actual=f'10% reserve={avg_10:.1f} cos, 50% reserve={avg_50:.1f} cos, ratio={ratio:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='reserve_reduces_initial_companies', name='Higher Reserve → Fewer Companies',
+                    category='structural', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_seed_only_fund_structure():
+    """A 100% Seed fund should produce companies at Seed stage with correct count."""
+    try:
+        exp = Experiment()
+
+        # Use 1% reserve (0% gets coerced to 30%)
+        fe = _make_frontend_config(
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=1,
+            check_sizes_at_entry={'Seed': 2.0},
+            reinvest_unused_reserve=False, num_iterations=1,
+        )
+        d = convert_frontend_config_to_backend(fe)
+        cfg = exp.create_montecarlo_sim_configuration(d)
+        mc = Montecarlo(cfg)
+        mc.initialize_scenarios()
+
+        firm = mc.firm_scenarios[0]
+        all_seed = all(co.stage == 'Seed' for co in firm.portfolio)
+        count = len(firm.portfolio)
+        # 1% reserve: primary = 200 * 0.99 = 198, 198/2 = 99
+        expected_count = int(200 * 0.99 / 2.0)  # 99
+
+        passed = all_seed and count == expected_count
+
+        return dict(
+            id='seed_only_fund_structure',
+            name='100% Seed Fund Structure',
+            category='structural',
+            description=(
+                'A $200M fund investing only at Seed with $2M checks and 1% reserve should create '
+                'exactly 99 companies (198/2=99), all at Seed stage.'
+            ),
+            expected=f'{expected_count} companies, all at Seed',
+            actual=f'{count} companies, all_seed={all_seed}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='seed_only_fund_structure', name='100% Seed Fund Structure',
+                    category='structural', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1165,6 +1420,11 @@ def run_all_tests() -> List[Dict[str, Any]]:
         test_reinvest_off_fewer_companies,
         test_moic_uses_fund_size,
         test_avg_company_counts_are_averages,
+        test_check_size_halves_company_count,
+        test_larger_fund_more_companies,
+        test_multi_stage_split,
+        test_reserve_reduces_initial_companies,
+        test_seed_only_fund_structure,
     ]
     results = []
     for t in tests:
