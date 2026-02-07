@@ -132,16 +132,6 @@ class MultiStrategyRequest(BaseModel):
     configs: List[SimulationConfigRequest]
 
 
-@app.get("/")
-async def root():
-    """Root endpoint with API information."""
-    return {
-        "name": "Monaco Monte Carlo Simulation API",
-        "version": "1.0.0",
-        "description": "API for running venture capital fund Monte Carlo simulations"
-    }
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
