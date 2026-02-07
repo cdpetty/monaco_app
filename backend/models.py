@@ -105,25 +105,29 @@ class Company:
 
         return pro_rata_investment
 
-    def m_and_a(self) -> None:
+    def m_and_a(self, m_and_a_outcomes=None) -> None:
         """Execute M&A exit for this company."""
         self.age += 1
         self.state = "Acquired"
 
         # M&A outcome probabilities and multipliers
-        m_and_a_outcome_odds = [0.01, 0.05, 0.6, 0.34]
-        m_and_a_multipliers = [10, 5, 1, 0.1]
+        if m_and_a_outcomes:
+            m_and_a_outcome_odds = [o['pct'] for o in m_and_a_outcomes]
+            m_and_a_multipliers = [o['multiple'] for o in m_and_a_outcomes]
+        else:
+            m_and_a_outcome_odds = [0.01, 0.05, 0.6, 0.34]
+            m_and_a_multipliers = [10, 5, 1, 0.1]
 
         # Generate random value which determines M&A outcomes
         rand = random.random()
-        if rand < m_and_a_outcome_odds[0]:
-            self.valuation = m_and_a_multipliers[0] * self.valuation
-        elif rand < m_and_a_outcome_odds[0] + m_and_a_outcome_odds[1]:
-            self.valuation = m_and_a_multipliers[1] * self.valuation
-        elif rand < m_and_a_outcome_odds[0] + m_and_a_outcome_odds[1] + m_and_a_outcome_odds[2]:
-            self.valuation = m_and_a_multipliers[2] * self.valuation
-        else:
-            self.valuation = m_and_a_multipliers[3] * self.valuation
+        cumulative = 0.0
+        for i, odds in enumerate(m_and_a_outcome_odds):
+            cumulative += odds
+            if rand < cumulative:
+                self.valuation = m_and_a_multipliers[i] * self.valuation
+                return
+        # Fallback to last tier
+        self.valuation = m_and_a_multipliers[-1] * self.valuation
 
     def fail(self) -> None:
         """Mark company as failed."""
@@ -303,6 +307,7 @@ class Montecarlo:
         self.stage_probs = config.graduation_rates
         self.stage_valuations = config.stage_valuations
         self.stage_dilution = config.stage_dilution
+        self.m_and_a_outcomes = getattr(config, 'm_and_a_outcomes', None)
 
         # Firm attributes
         self.firm_attributes = {
@@ -363,7 +368,7 @@ class Montecarlo:
                         rand = random.random()
                         # Determine outcome: M&A, fail, or promote
                         if rand < self.stage_probs[company.stage][2]:
-                            company.m_and_a()
+                            company.m_and_a(self.m_and_a_outcomes)
                         elif rand < self.stage_probs[company.stage][2] + self.stage_probs[company.stage][1]:
                             company.fail()
                         else:
@@ -591,6 +596,32 @@ class Montecarlo:
 
         return {'segments': breakdown}
 
+    def get_portfolio_breakdown_by_bins(self, num_bins: int = 24, cap: float = 10.0) -> List:
+        """Get portfolio breakdown averaged per histogram bin (by MOIC range)."""
+        num = len(self.firm_scenarios)
+        if num == 0:
+            return [None] * num_bins
+
+        bin_width = cap / num_bins
+        buckets: List[List] = [[] for _ in range(num_bins)]
+
+        for firm in self.firm_scenarios:
+            moic = firm.get_MoM()
+            idx = int(moic / bin_width)
+            if idx >= num_bins:
+                idx = num_bins - 1
+            if idx < 0:
+                idx = 0
+            buckets[idx].append(firm)
+
+        result = []
+        for bucket in buckets:
+            if len(bucket) == 0:
+                result.append(None)
+            else:
+                result.append(self._breakdown_for_firms(bucket))
+        return result
+
     def get_portfolio_breakdown_by_percentile(self) -> Dict[str, Dict]:
         """Get portfolio breakdown for scenarios near each percentile."""
         num = len(self.firm_scenarios)
@@ -696,7 +727,8 @@ class Montecarlo_Sim_Configuration:
                  primary_investments: Dict, initial_investment_sizes: Dict,
                  follow_on_reserve: float, fund_size: float,
                  pro_rata_at_or_below: float, num_scenarios: int,
-                 reinvest_unused_reserve: bool = True):
+                 reinvest_unused_reserve: bool = True,
+                 m_and_a_outcomes: list = None):
         # Market variables
         self.stages = stages
         self.graduation_rates = graduation_rates.copy()
@@ -704,6 +736,7 @@ class Montecarlo_Sim_Configuration:
         self.stage_valuations = stage_valuations.copy()
         self.lifespan_periods = lifespan_periods
         self.lifespan_years = lifespan_years
+        self.m_and_a_outcomes = m_and_a_outcomes
 
         # Investment Strategy
         self.primary_investments = primary_investments.copy()

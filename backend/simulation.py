@@ -165,7 +165,8 @@ class Experiment:
                 fund_size=config['fund_size'],
                 pro_rata_at_or_below=config['pro_rata_at_or_below'],
                 num_scenarios=config['num_scenarios'],
-                reinvest_unused_reserve=config.get('reinvest_unused_reserve', True)
+                reinvest_unused_reserve=config.get('reinvest_unused_reserve', True),
+                m_and_a_outcomes=config.get('m_and_a_outcomes')
             )
         except KeyError as e:
             print(f"Missing required configuration parameter: {e}")
@@ -267,6 +268,20 @@ class Experiment:
         result['overall_avg_ownership'] = total_ownership / total_companies if total_companies > 0 else 0
         result['total_portfolio_companies'] = total_companies
 
+        # Average exit ownership across all alive/acquired companies
+        num_scenarios = len(montecarlo.firm_scenarios)
+        if num_scenarios > 0:
+            total_exit_ownership = 0
+            total_exit_companies = 0
+            for firm in montecarlo.firm_scenarios:
+                for co in firm.portfolio:
+                    if co.state in ('Alive', 'Acquired'):
+                        total_exit_ownership += co.firm_ownership * 100
+                        total_exit_companies += 1
+            result['avg_exit_ownership'] = total_exit_ownership / total_exit_companies if total_exit_companies > 0 else 0
+        else:
+            result['avg_exit_ownership'] = 0
+
         # Portfolio size
         result['avg_portfolio_size'] = montecarlo.get_average_number_of_companies_post_pro_rata_adjustment()
 
@@ -285,6 +300,7 @@ class Experiment:
             result[f'{stage}_companies'] = stage_counter.get(stage, 0)
 
         result['portfolio_breakdown'] = montecarlo.get_portfolio_breakdown_by_percentile()
+        result['bin_breakdowns'] = montecarlo.get_portfolio_breakdown_by_bins(num_bins=24, cap=10.0)
 
         state_counter = montecarlo.get_total_companies_by_state()
         num_scenarios = len(montecarlo.firm_scenarios)

@@ -15,7 +15,8 @@ from models import Company, Firm, Montecarlo, Montecarlo_Sim_Configuration
 from simulation import Experiment
 from main import convert_frontend_config_to_backend, SimulationConfig
 from config import (
-    DEFAULT_STAGES, MARKET, DEFAULT_STAGE_DILUTION,
+    DEFAULT_STAGES, MARKET, ABOVE_MARKET, BELOW_MARKET,
+    DEFAULT_STAGE_DILUTION,
     DEFAULT_STAGE_VALUATIONS, DEFAULT_LIFESPAN_PERIODS, DEFAULT_LIFESPAN_YEARS
 )
 
@@ -1693,6 +1694,757 @@ def test_high_recycling_increases_company_count():
 
 
 # ---------------------------------------------------------------------------
+# Market scenario & M&A outcome tests
+# ---------------------------------------------------------------------------
+
+def test_bull_market_higher_moic():
+    """Bull (ABOVE_MARKET) scenario should produce higher MOIC than bear (BELOW_MARKET)."""
+    try:
+        exp = Experiment()
+        N = 500
+
+        fe_bull = _make_frontend_config(
+            market_scenario='ABOVE_MARKET', num_iterations=N,
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=30,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_bull = convert_frontend_config_to_backend(fe_bull)
+        cfg_bull = exp.create_montecarlo_sim_configuration(d_bull)
+        res_bull = exp.run_montecarlo(cfg_bull)
+        mean_bull = float(np.mean(res_bull['moic_outcomes']))
+
+        fe_bear = _make_frontend_config(
+            market_scenario='BELOW_MARKET', num_iterations=N,
+            fund_size_m=200, dry_powder_reserve_for_pro_rata=30,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_bear = convert_frontend_config_to_backend(fe_bear)
+        cfg_bear = exp.create_montecarlo_sim_configuration(d_bear)
+        res_bear = exp.run_montecarlo(cfg_bear)
+        mean_bear = float(np.mean(res_bear['moic_outcomes']))
+
+        passed = mean_bull > mean_bear
+
+        return dict(
+            id='bull_market_higher_moic',
+            name='Bull Market → Higher MOIC',
+            category='market_scenarios',
+            description=(
+                'ABOVE_MARKET scenario has higher promote rates and lower fail rates, '
+                'so it should produce a higher average MOIC than BELOW_MARKET.'
+            ),
+            expected='mean MOIC (bull) > mean MOIC (bear)',
+            actual=f'bull mean={mean_bull:.2f}x, bear mean={mean_bear:.2f}x',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='bull_market_higher_moic', name='Bull Market → Higher MOIC',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_bear_market_more_failures():
+    """Bear market should produce more failed companies on average."""
+    try:
+        exp = Experiment()
+        N = 500
+
+        fe_bull = _make_frontend_config(
+            market_scenario='ABOVE_MARKET', num_iterations=N,
+            fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_bull = convert_frontend_config_to_backend(fe_bull)
+        cfg_bull = exp.create_montecarlo_sim_configuration(d_bull)
+        res_bull = exp.run_montecarlo(cfg_bull)
+        failed_bull = res_bull['Failed Companies']
+
+        fe_bear = _make_frontend_config(
+            market_scenario='BELOW_MARKET', num_iterations=N,
+            fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_bear = convert_frontend_config_to_backend(fe_bear)
+        cfg_bear = exp.create_montecarlo_sim_configuration(d_bear)
+        res_bear = exp.run_montecarlo(cfg_bear)
+        failed_bear = res_bear['Failed Companies']
+
+        passed = failed_bear > failed_bull
+
+        return dict(
+            id='bear_market_more_failures',
+            name='Bear Market → More Failures',
+            category='market_scenarios',
+            description=(
+                'BELOW_MARKET has higher fail rates per stage, so the average number '
+                'of failed companies should exceed the ABOVE_MARKET count.'
+            ),
+            expected='failed (bear) > failed (bull)',
+            actual=f'bear failed={failed_bear:.1f}, bull failed={failed_bull:.1f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='bear_market_more_failures', name='Bear Market → More Failures',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_market_scenario_graduation_rates_flow():
+    """Verify each market scenario name maps to correct graduation rates in the backend config."""
+    try:
+        scenarios = {
+            'BELOW_MARKET': BELOW_MARKET,
+            'MARKET': MARKET,
+            'ABOVE_MARKET': ABOVE_MARKET,
+        }
+        results_detail = []
+        all_passed = True
+
+        for name, expected_rates in scenarios.items():
+            fe = _make_frontend_config(market_scenario=name)
+            backend = convert_frontend_config_to_backend(fe)
+            actual_rates = backend['graduation_rates']
+            match = actual_rates == expected_rates
+            if not match:
+                all_passed = False
+            results_detail.append(f'{name}: {"OK" if match else "MISMATCH"}')
+
+        return dict(
+            id='market_scenario_rates_flow',
+            name='Market Scenario → Graduation Rates',
+            category='market_scenarios',
+            description=(
+                'Each market scenario name (BELOW_MARKET, MARKET, ABOVE_MARKET) must map to '
+                'its corresponding graduation rates dict when converted to backend config.'
+            ),
+            expected='All 3 scenarios map correctly',
+            actual='; '.join(results_detail),
+            passed=all_passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='market_scenario_rates_flow', name='Market Scenario → Graduation Rates',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_custom_graduation_rates_override():
+    """Custom graduation rates passed directly should override the market scenario."""
+    try:
+        custom_rates = {stage: [0.33, 0.34, 0.33] for stage in DEFAULT_STAGES}
+        custom_rates['Series G'] = [0.0, 0.0, 0.0]
+
+        fe = _make_frontend_config(
+            market_scenario='MARKET',
+            graduation_rates=custom_rates,
+        )
+        backend = convert_frontend_config_to_backend(fe)
+        actual_rates = backend['graduation_rates']
+
+        # Custom rates should take precedence over MARKET defaults
+        passed = actual_rates == custom_rates and actual_rates != MARKET
+
+        return dict(
+            id='custom_graduation_rates_override',
+            name='Custom Graduation Rates Override',
+            category='market_scenarios',
+            description=(
+                'When graduation_rates is explicitly provided alongside a market_scenario, '
+                'the explicit rates should take precedence over the preset.'
+            ),
+            expected='Backend uses custom rates, not MARKET defaults',
+            actual=f'custom rates used: {actual_rates == custom_rates}, differs from MARKET: {actual_rates != MARKET}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='custom_graduation_rates_override', name='Custom Graduation Rates Override',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_bull_vs_average_vs_bear_ordering():
+    """MOIC ordering should be: bull > average > bear over many iterations."""
+    try:
+        exp = Experiment()
+        N = 500
+        means = {}
+
+        for scenario in ['ABOVE_MARKET', 'MARKET', 'BELOW_MARKET']:
+            fe = _make_frontend_config(
+                market_scenario=scenario, num_iterations=N,
+                fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+            )
+            d = convert_frontend_config_to_backend(fe)
+            cfg = exp.create_montecarlo_sim_configuration(d)
+            res = exp.run_montecarlo(cfg)
+            means[scenario] = float(np.mean(res['moic_outcomes']))
+
+        passed = means['ABOVE_MARKET'] > means['MARKET'] > means['BELOW_MARKET']
+
+        return dict(
+            id='bull_avg_bear_ordering',
+            name='Bull > Average > Bear MOIC Ordering',
+            category='market_scenarios',
+            description=(
+                'Over 500 iterations, the average MOIC should be strictly ordered: '
+                'ABOVE_MARKET > MARKET > BELOW_MARKET.'
+            ),
+            expected='bull > average > bear',
+            actual=f'bull={means["ABOVE_MARKET"]:.2f}x, avg={means["MARKET"]:.2f}x, bear={means["BELOW_MARKET"]:.2f}x',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='bull_avg_bear_ordering', name='Bull > Average > Bear MOIC Ordering',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_custom_mna_outcomes_all_10x():
+    """Setting all M&A outcomes to 10x should dramatically increase MOIC."""
+    try:
+        exp = Experiment()
+        N = 300
+
+        # Default M&A outcomes (mixed multipliers)
+        fe_default = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_default = convert_frontend_config_to_backend(fe_default)
+        cfg_default = exp.create_montecarlo_sim_configuration(d_default)
+        res_default = exp.run_montecarlo(cfg_default)
+        mean_default = float(np.mean(res_default['moic_outcomes']))
+
+        # All M&A outcomes at 10x
+        fe_10x = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            m_and_a_outcomes=[
+                {'pct': 0.25, 'multiple': 10},
+                {'pct': 0.25, 'multiple': 10},
+                {'pct': 0.25, 'multiple': 10},
+                {'pct': 0.25, 'multiple': 10},
+            ],
+        )
+        d_10x = convert_frontend_config_to_backend(fe_10x)
+        cfg_10x = exp.create_montecarlo_sim_configuration(d_10x)
+        res_10x = exp.run_montecarlo(cfg_10x)
+        mean_10x = float(np.mean(res_10x['moic_outcomes']))
+
+        passed = mean_10x > mean_default * 1.5
+
+        return dict(
+            id='custom_mna_all_10x',
+            name='All M&A 10x → Higher MOIC',
+            category='mna_outcomes',
+            description=(
+                'When every M&A exit is 10x valuation, the average MOIC should be '
+                'substantially higher than with default mixed outcomes (1%@10x, 5%@5x, 60%@1x, 34%@0.1x).'
+            ),
+            expected=f'mean_10x > mean_default × 1.5',
+            actual=f'10x mean={mean_10x:.2f}x, default mean={mean_default:.2f}x, ratio={mean_10x/mean_default:.2f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='custom_mna_all_10x', name='All M&A 10x → Higher MOIC',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_custom_mna_outcomes_all_fire_sale():
+    """Setting all M&A to 0.1x fire sale should produce lower MOIC."""
+    try:
+        exp = Experiment()
+        N = 300
+
+        fe_default = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_default = convert_frontend_config_to_backend(fe_default)
+        cfg_default = exp.create_montecarlo_sim_configuration(d_default)
+        res_default = exp.run_montecarlo(cfg_default)
+        mean_default = float(np.mean(res_default['moic_outcomes']))
+
+        # All M&A at 0.1x fire sale
+        fe_fire = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+            m_and_a_outcomes=[
+                {'pct': 0.25, 'multiple': 0.1},
+                {'pct': 0.25, 'multiple': 0.1},
+                {'pct': 0.25, 'multiple': 0.1},
+                {'pct': 0.25, 'multiple': 0.1},
+            ],
+        )
+        d_fire = convert_frontend_config_to_backend(fe_fire)
+        cfg_fire = exp.create_montecarlo_sim_configuration(d_fire)
+        res_fire = exp.run_montecarlo(cfg_fire)
+        mean_fire = float(np.mean(res_fire['moic_outcomes']))
+
+        passed = mean_fire < mean_default
+
+        return dict(
+            id='custom_mna_all_fire_sale',
+            name='All M&A Fire Sale → Lower MOIC',
+            category='mna_outcomes',
+            description=(
+                'When every M&A exit is 0.1x (fire sale), the average MOIC should be '
+                'lower than with default mixed outcomes.'
+            ),
+            expected='mean_fire_sale < mean_default',
+            actual=f'fire_sale mean={mean_fire:.2f}x, default mean={mean_default:.2f}x',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='custom_mna_all_fire_sale', name='All M&A Fire Sale → Lower MOIC',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_mna_outcomes_deterministic_unit():
+    """Verify each custom M&A tier applies its multiplier correctly."""
+    try:
+        tiers = [
+            {'pct': 1.0, 'multiple': 7.5},
+            {'pct': 1.0, 'multiple': 3.0},
+            {'pct': 1.0, 'multiple': 0.5},
+            {'pct': 1.0, 'multiple': 0.0},
+        ]
+
+        results_detail = []
+        all_passed = True
+
+        for tier in tiers:
+            outcomes = [tier]  # Single-tier: 100% chance of this multiplier
+            co = make_company(stage='Pre-seed', valuation=15, ownership=0.1, invested=1.5)
+            co.m_and_a(outcomes)
+            expected_val = 15 * tier['multiple']
+            ok = approx(co.valuation, expected_val) and co.state == 'Acquired'
+            if not ok:
+                all_passed = False
+            results_detail.append(
+                f"{tier['multiple']}x: val=${co.valuation:.1f}M (expected ${expected_val:.1f}M) {'OK' if ok else 'FAIL'}"
+            )
+
+        return dict(
+            id='mna_outcomes_deterministic_unit',
+            name='M&A Custom Tiers Unit Test',
+            category='mna_outcomes',
+            description=(
+                'Test each custom M&A multiplier in isolation by setting 100% probability '
+                'for a single tier. Verifies 7.5x, 3.0x, 0.5x, and 0.0x multipliers.'
+            ),
+            expected='All 4 custom multipliers apply correctly to $15M valuation',
+            actual='; '.join(results_detail),
+            passed=all_passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='mna_outcomes_deterministic_unit', name='M&A Custom Tiers Unit Test',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_mna_outcomes_flow_through_api():
+    """Verify m_and_a_outcomes flows from frontend config through the full pipeline."""
+    try:
+        custom_outcomes = [
+            {'pct': 0.10, 'multiple': 20},
+            {'pct': 0.20, 'multiple': 5},
+            {'pct': 0.40, 'multiple': 1},
+            {'pct': 0.30, 'multiple': 0.1},
+        ]
+
+        fe = _make_frontend_config(m_and_a_outcomes=custom_outcomes)
+        backend = convert_frontend_config_to_backend(fe)
+
+        # Should appear in the backend dict
+        in_dict = backend.get('m_and_a_outcomes') == custom_outcomes
+
+        # Should survive Experiment.create_montecarlo_sim_configuration
+        exp = Experiment()
+        cfg = exp.create_montecarlo_sim_configuration(backend)
+        on_config = cfg.m_and_a_outcomes == custom_outcomes
+
+        # Should reach Montecarlo
+        mc = Montecarlo(cfg)
+        on_mc = mc.m_and_a_outcomes == custom_outcomes
+
+        passed = in_dict and on_config and on_mc
+
+        return dict(
+            id='mna_outcomes_flow_through_api',
+            name='M&A Outcomes Flow Through API',
+            category='mna_outcomes',
+            description=(
+                'Custom m_and_a_outcomes must flow from SimulationConfig through '
+                'convert_frontend_config_to_backend, Experiment.create_montecarlo_sim_configuration, '
+                'and into Montecarlo. Verifies the full pipeline.'
+            ),
+            expected='Custom outcomes present at all 3 levels',
+            actual=f'in_dict={in_dict}, on_config={on_config}, on_mc={on_mc}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='mna_outcomes_flow_through_api', name='M&A Outcomes Flow Through API',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_mna_none_uses_defaults():
+    """When m_and_a_outcomes is None, the default hardcoded tiers should be used."""
+    try:
+        # Default buckets: [0, 0.01) → 10x, [0.01, 0.06) → 5x, [0.06, 0.66) → 1x, [0.66, 1.0) → 0.1x
+        # Find a seed in the 1x bucket [0.06, 0.66)
+        found_seed = None
+        for s in range(10000):
+            random.seed(s)
+            r = random.random()
+            if 0.06 <= r < 0.66:
+                found_seed = s
+                break
+
+        random.seed(found_seed)
+        co = make_company(stage='Pre-seed', valuation=15, ownership=0.1, invested=1.5)
+        co.m_and_a(None)  # Explicitly pass None
+
+        expected_val = 15 * 1  # 1x bucket
+        passed = approx(co.valuation, expected_val) and co.state == 'Acquired'
+
+        return dict(
+            id='mna_none_uses_defaults',
+            name='M&A None → Default Tiers',
+            category='mna_outcomes',
+            description=(
+                'When m_and_a_outcomes=None, the Company.m_and_a() method should fall back '
+                'to the hardcoded defaults: 1%@10x, 5%@5x, 60%@1x, 34%@0.1x.'
+            ),
+            expected=f'seed={found_seed} in 1x bucket: val=$15M',
+            actual=f'val=${co.valuation:.1f}M, state={co.state}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='mna_none_uses_defaults', name='M&A None → Default Tiers',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_mna_probability_distribution():
+    """Statistical test: verify M&A outcome distribution matches configured probabilities."""
+    try:
+        outcomes = [
+            {'pct': 0.10, 'multiple': 10},
+            {'pct': 0.30, 'multiple': 5},
+            {'pct': 0.40, 'multiple': 1},
+            {'pct': 0.20, 'multiple': 0.1},
+        ]
+
+        N = 10000
+        counts = {10: 0, 5: 0, 1: 0, 0.1: 0}
+        random.seed(12345)
+
+        for _ in range(N):
+            co = make_company(stage='Pre-seed', valuation=100, ownership=0.1, invested=1.5)
+            co.m_and_a(outcomes)
+            # Determine which multiplier was applied
+            ratio = co.valuation / 100
+            closest = min(counts.keys(), key=lambda m: abs(ratio - m))
+            counts[closest] += 1
+
+        # Check each bucket is within tolerance of expected
+        results_detail = []
+        all_passed = True
+        for tier in outcomes:
+            expected_pct = tier['pct']
+            actual_pct = counts[tier['multiple']] / N
+            tolerance = 0.03  # ±3%
+            ok = abs(actual_pct - expected_pct) < tolerance
+            if not ok:
+                all_passed = False
+            results_detail.append(
+                f"{tier['multiple']}x: expected={expected_pct*100:.0f}%, actual={actual_pct*100:.1f}% {'OK' if ok else 'FAIL'}"
+            )
+
+        return dict(
+            id='mna_probability_distribution',
+            name='M&A Outcome Probability Distribution',
+            category='mna_outcomes',
+            description=(
+                f'Run {N} M&A events with custom probabilities (10%@10x, 30%@5x, 40%@1x, 20%@0.1x) '
+                'and verify the empirical distribution matches within ±3%.'
+            ),
+            expected='Each bucket within ±3% of configured probability',
+            actual='; '.join(results_detail),
+            passed=all_passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='mna_probability_distribution', name='M&A Outcome Probability Distribution',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_no_company_exceeds_series_g():
+    """Verify no company ever ends up in a stage beyond Series G after simulation."""
+    try:
+        exp = Experiment()
+        N = 200
+
+        fe = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d = convert_frontend_config_to_backend(fe)
+        cfg = exp.create_montecarlo_sim_configuration(d)
+        mc = Montecarlo(cfg)
+        mc.initialize_scenarios()
+        mc.simulate(seed=42)
+
+        max_stage_idx = len(DEFAULT_STAGES) - 1  # 8 = Series G
+        bad_companies = []
+        for firm in mc.firm_scenarios:
+            for co in firm.portfolio:
+                stage_idx = co.get_numerical_stage()
+                if stage_idx > max_stage_idx:
+                    bad_companies.append(f'{co.name}@{co.stage}(idx={stage_idx})')
+
+        passed = len(bad_companies) == 0
+        total_companies = sum(len(f.portfolio) for f in mc.firm_scenarios)
+
+        return dict(
+            id='no_company_exceeds_series_g',
+            name='No Company Beyond Series G',
+            category='market_scenarios',
+            description=(
+                f'After running {N} iterations, verify no company has a stage index '
+                'exceeding Series G (index 8). Checks all companies in all firms.'
+            ),
+            expected=f'0 companies beyond Series G out of ~{total_companies}',
+            actual=f'{len(bad_companies)} violations' + (f': {bad_companies[:5]}' if bad_companies else ''),
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='no_company_exceeds_series_g', name='No Company Beyond Series G',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_series_f_promotes_to_g_not_beyond():
+    """A Series F company promoted should become Series G, not beyond."""
+    try:
+        co = make_company(stage='Series F', valuation=5000, ownership=0.01, invested=1.5)
+        co.promote(secondary_dry_powder=0, pro_rata_at_or_below=0)
+
+        passed = co.stage == 'Series G' and co.get_numerical_stage() == 8
+
+        return dict(
+            id='series_f_promotes_to_g',
+            name='Series F → Series G (Not Beyond)',
+            category='market_scenarios',
+            description=(
+                'Promoting a Series F company (index 7) should land on Series G (index 8), '
+                'the terminal stage. The min() bounds check prevents going to index 9.'
+            ),
+            expected='stage=Series G, index=8',
+            actual=f'stage={co.stage}, index={co.get_numerical_stage()}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='series_f_promotes_to_g', name='Series F → Series G (Not Beyond)',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_series_g_promote_stays_at_g():
+    """If promote() were called on Series G, it should stay at Series G (clamped)."""
+    try:
+        co = make_company(stage='Series G', valuation=10000, ownership=0.001, invested=1.5)
+        co.promote(secondary_dry_powder=0, pro_rata_at_or_below=0)
+
+        passed = co.stage == 'Series G' and co.get_numerical_stage() == 8
+
+        return dict(
+            id='series_g_promote_stays',
+            name='Series G Promote → Still Series G',
+            category='market_scenarios',
+            description=(
+                'If promote() is called on a Series G company (defensive test), '
+                'the min() clamp should keep it at Series G (index 8).'
+            ),
+            expected='stage=Series G, index=8',
+            actual=f'stage={co.stage}, index={co.get_numerical_stage()}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='series_g_promote_stays', name='Series G Promote → Still Series G',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_high_mna_rate_more_acquisitions():
+    """Custom rates with very high M&A probability should yield more acquired companies."""
+    try:
+        exp = Experiment()
+        N = 300
+
+        # Custom rates: 80% M&A at every stage
+        high_mna_rates = {}
+        for stage in DEFAULT_STAGES:
+            if stage == 'Series G':
+                high_mna_rates[stage] = [0.0, 0.0, 0.0]
+            else:
+                high_mna_rates[stage] = [0.05, 0.05, 0.90]
+
+        fe_high = _make_frontend_config(
+            graduation_rates=high_mna_rates, num_iterations=N,
+            fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_high = convert_frontend_config_to_backend(fe_high)
+        cfg_high = exp.create_montecarlo_sim_configuration(d_high)
+        res_high = exp.run_montecarlo(cfg_high)
+        acq_high = res_high['Acquired Companies']
+
+        fe_low = _make_frontend_config(
+            num_iterations=N, fund_size_m=200,
+            check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_low = convert_frontend_config_to_backend(fe_low)
+        cfg_low = exp.create_montecarlo_sim_configuration(d_low)
+        res_low = exp.run_montecarlo(cfg_low)
+        acq_low = res_low['Acquired Companies']
+
+        passed = acq_high > acq_low
+
+        return dict(
+            id='high_mna_rate_more_acquisitions',
+            name='High M&A Rate → More Acquisitions',
+            category='market_scenarios',
+            description=(
+                'Custom graduation rates with 90% M&A probability at each stage should produce '
+                'significantly more acquired companies than default MARKET rates (~15-30% M&A).'
+            ),
+            expected='acquired (high M&A) > acquired (default)',
+            actual=f'high M&A acquired={acq_high:.1f}, default acquired={acq_low:.1f}',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='high_mna_rate_more_acquisitions', name='High M&A Rate → More Acquisitions',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_zero_mna_rate_no_acquisitions():
+    """With 0% M&A at every stage, no companies should be acquired."""
+    try:
+        # Custom rates: 0% M&A everywhere, 70% promote, 30% fail
+        zero_mna_rates = {}
+        for stage in DEFAULT_STAGES:
+            if stage == 'Series G':
+                zero_mna_rates[stage] = [0.0, 0.0, 0.0]
+            else:
+                zero_mna_rates[stage] = [0.70, 0.30, 0.0]
+
+        config = make_config(
+            num_scenarios=100,
+            graduation_rates=zero_mna_rates,
+        )
+        mc = Montecarlo(config)
+        mc.initialize_scenarios()
+        mc.simulate(seed=42)
+
+        total_acquired = 0
+        for firm in mc.firm_scenarios:
+            for co in firm.portfolio:
+                if co.state == 'Acquired':
+                    total_acquired += 1
+
+        passed = total_acquired == 0
+
+        return dict(
+            id='zero_mna_rate_no_acquisitions',
+            name='Zero M&A Rate → No Acquisitions',
+            category='market_scenarios',
+            description=(
+                'With M&A probability set to 0% at every stage, no companies should '
+                'end up in the Acquired state after simulation.'
+            ),
+            expected='0 acquired companies',
+            actual=f'{total_acquired} acquired companies across 100 iterations',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='zero_mna_rate_no_acquisitions', name='Zero M&A Rate → No Acquisitions',
+                    category='market_scenarios', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+def test_mna_combined_scenario_and_outcomes():
+    """Test combining bear market with favorable M&A outcomes — M&A uplift should partially offset bear drag."""
+    try:
+        exp = Experiment()
+        N = 500
+
+        # Pure bear market with default M&A
+        fe_bear = _make_frontend_config(
+            market_scenario='BELOW_MARKET', num_iterations=N,
+            fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+        )
+        d_bear = convert_frontend_config_to_backend(fe_bear)
+        cfg_bear = exp.create_montecarlo_sim_configuration(d_bear)
+        res_bear = exp.run_montecarlo(cfg_bear)
+        mean_bear = float(np.mean(res_bear['moic_outcomes']))
+
+        # Bear market with very favorable M&A outcomes (all 5x)
+        fe_bear_good_mna = _make_frontend_config(
+            market_scenario='BELOW_MARKET', num_iterations=N,
+            fund_size_m=200, check_sizes_at_entry={'Pre-seed': 1.5},
+            m_and_a_outcomes=[
+                {'pct': 0.25, 'multiple': 5},
+                {'pct': 0.25, 'multiple': 5},
+                {'pct': 0.25, 'multiple': 5},
+                {'pct': 0.25, 'multiple': 5},
+            ],
+        )
+        d_bgm = convert_frontend_config_to_backend(fe_bear_good_mna)
+        cfg_bgm = exp.create_montecarlo_sim_configuration(d_bgm)
+        res_bgm = exp.run_montecarlo(cfg_bgm)
+        mean_bear_good_mna = float(np.mean(res_bgm['moic_outcomes']))
+
+        # Bear + good M&A should outperform bear + default M&A
+        passed = mean_bear_good_mna > mean_bear
+
+        return dict(
+            id='mna_combined_scenario_and_outcomes',
+            name='Bear + Good M&A > Bear + Default M&A',
+            category='mna_outcomes',
+            description=(
+                'A bear market combined with 100% 5x M&A outcomes should produce higher '
+                'MOIC than the same bear market with default mixed M&A (which includes 34% fire sales).'
+            ),
+            expected='bear + 5x M&A > bear + default M&A',
+            actual=f'bear+5x={mean_bear_good_mna:.2f}x, bear+default={mean_bear:.2f}x',
+            passed=passed,
+            details='',
+        )
+    except Exception as e:
+        return dict(id='mna_combined_scenario_and_outcomes', name='Bear + Good M&A > Bear + Default M&A',
+                    category='mna_outcomes', description='', expected='',
+                    actual=str(e), passed=False, details=str(e))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1733,6 +2485,27 @@ def run_all_tests() -> List[Dict[str, Any]]:
         test_fees_recycling_budget_identity,
         test_high_fees_reduce_company_count,
         test_high_recycling_increases_company_count,
+        # Market scenarios
+        test_bull_market_higher_moic,
+        test_bear_market_more_failures,
+        test_market_scenario_graduation_rates_flow,
+        test_custom_graduation_rates_override,
+        test_bull_vs_average_vs_bear_ordering,
+        # M&A outcomes
+        test_custom_mna_outcomes_all_10x,
+        test_custom_mna_outcomes_all_fire_sale,
+        test_mna_outcomes_deterministic_unit,
+        test_mna_outcomes_flow_through_api,
+        test_mna_none_uses_defaults,
+        test_mna_probability_distribution,
+        test_mna_combined_scenario_and_outcomes,
+        # Stage boundary
+        test_no_company_exceeds_series_g,
+        test_series_f_promotes_to_g_not_beyond,
+        test_series_g_promote_stays_at_g,
+        # M&A rate effects
+        test_high_mna_rate_more_acquisitions,
+        test_zero_mna_rate_no_acquisitions,
     ]
     results = []
     for t in tests:

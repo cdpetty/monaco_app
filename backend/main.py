@@ -7,8 +7,10 @@ This module provides REST API endpoints for:
 - Retrieving simulation results and statistics
 """
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import uvicorn
@@ -68,6 +70,7 @@ class SimulationConfig(BaseModel):
     num_companies_to_simulate: Optional[int] = Field(default=100, description="Number of companies")
     num_iterations: Optional[int] = Field(default=5000, description="Number of iterations")
     num_periods: Optional[int] = Field(default=8, description="Number of periods")
+    m_and_a_outcomes: Optional[List[Dict]] = Field(default=None, description="M&A exit outcome tiers [{pct, multiple}, ...]")
 
 
 class SimulationRequest(BaseModel):
@@ -324,7 +327,8 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
         "committed_capital": committed_capital,
         "pro_rata_at_or_below": pro_rata_at_or_below,
         "num_scenarios": sim_config.num_iterations or 5000,
-        "reinvest_unused_reserve": sim_config.reinvest_unused_reserve if sim_config.reinvest_unused_reserve is not None else True
+        "reinvest_unused_reserve": sim_config.reinvest_unused_reserve if sim_config.reinvest_unused_reserve is not None else True,
+        "m_and_a_outcomes": sim_config.m_and_a_outcomes
     }
 
 
@@ -455,6 +459,9 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
                     "avg_primary_invested": result.get("avg_primary_invested", 0),
                     "avg_follow_on_invested": result.get("avg_follow_on_invested", 0),
                     "portfolio_breakdown": result.get("portfolio_breakdown", {}),
+                    "bin_breakdowns": result.get("bin_breakdowns", []),
+                    "avg_entry_ownership": result.get("overall_avg_ownership", 0),
+                    "avg_exit_ownership": result.get("avg_exit_ownership", 0),
                     "mean_tvpi": float(np.mean(tvpi_outcomes)) if tvpi_outcomes else 0,
                     "median_tvpi": float(np.percentile(tvpi_outcomes, 50)) if tvpi_outcomes else 0,
                     "p25_tvpi": float(np.percentile(tvpi_outcomes, 25)) if tvpi_outcomes else 0,
@@ -605,10 +612,23 @@ async def run_quick_simulation(
         raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
 
 
+# ─── Static file serving for production (frontend build) ─────────
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve frontend SPA — static files or fallback to index.html."""
+        file_path = os.path.join(static_dir, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(static_dir, "index.html"))
+
+
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True
+        port=port,
+        reload=os.environ.get("RAILWAY_ENVIRONMENT") is None,
     )

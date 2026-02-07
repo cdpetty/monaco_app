@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = `http://${window.location.hostname}:8000`;
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// ─── Data Constants ───────────────────────────────────────────────
 const ENTRY_STAGES = ['Pre-seed', 'Seed', 'Series A', 'Series B'];
 
 const DEFAULT_STAGE_VALUATIONS = {
@@ -19,20 +20,21 @@ function getStageValuations() {
 }
 
 const DEFAULT_CONFIG = {
-  fund_size_m: 50,
+  fund_size_m: 200,
   management_fee_pct: 2,
   fee_duration_years: 10,
   recycled_capital_pct: 20,
-  dry_powder_reserve_for_pro_rata: 30,
+  dry_powder_reserve_for_pro_rata: 40,
   reinvest_unused_reserve: true,
-  pro_rata_max_valuation: 70,
+  pro_rata_max_valuation: 500,
   stage_allocations: {
-    'Pre-seed': { pct: 60, check_size: 1.5 },
-    'Seed':     { pct: 40, check_size: 2.0 },
-    'Series A': { pct: 0,  check_size: 5.0 },
+    'Pre-seed': { pct: 25, check_size: 1.5 },
+    'Seed':     { pct: 25, check_size: 2.0 },
+    'Series A': { pct: 50, check_size: 5.0 },
     'Series B': { pct: 0,  check_size: 10.0 },
   },
 };
+const MAX_STRATEGIES = 6;
 
 function migrateConfig(config) {
   if (config.stage_allocations) return config;
@@ -43,88 +45,22 @@ function migrateConfig(config) {
     stage_allocations: {
       'Pre-seed': { pct: pp, check_size: preseed_check_size ?? 1.5 },
       'Seed':     { pct: 100 - pp, check_size: seed_check_size ?? 2.0 },
-      'Series A': { pct: 0,  check_size: 5.0 },
-      'Series B': { pct: 0,  check_size: 10.0 },
+      'Series A': { pct: 0, check_size: 5.0 },
+      'Series B': { pct: 0, check_size: 10.0 },
     },
   };
 }
 
-const FUND_NAMES = ['Fund A', 'Fund B', 'Fund C', 'Fund D'];
-
-const FUND_COLORS = [
-  { main: '#6E9EFF', dim: 'rgba(110,158,255,0.5)', bg: 'rgba(110,158,255,0.12)' },
-  { main: '#FF6E9E', dim: 'rgba(255,110,158,0.5)', bg: 'rgba(255,110,158,0.12)' },
-  { main: '#9EFF6E', dim: 'rgba(158,255,110,0.5)', bg: 'rgba(158,255,110,0.12)' },
-  { main: '#FFD26E', dim: 'rgba(255,210,110,0.5)', bg: 'rgba(255,210,110,0.12)' },
+const STRATEGY_COLORS = [
+  { main: '#2563eb', dim: 'rgba(37,99,235,0.4)', bg: 'rgba(37,99,235,0.08)' },
+  { main: '#dc2626', dim: 'rgba(220,38,38,0.4)', bg: 'rgba(220,38,38,0.08)' },
+  { main: '#16a34a', dim: 'rgba(22,163,74,0.4)', bg: 'rgba(22,163,74,0.08)' },
+  { main: '#ca8a04', dim: 'rgba(202,138,4,0.4)', bg: 'rgba(202,138,4,0.08)' },
+  { main: '#9333ea', dim: 'rgba(147,51,234,0.4)', bg: 'rgba(147,51,234,0.08)' },
+  { main: '#0891b2', dim: 'rgba(8,145,178,0.4)', bg: 'rgba(8,145,178,0.08)' },
 ];
 
-let nextFundId = 2;
-
-const customStyles = {
-  root: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    overflow: 'hidden',
-  },
-  patternLines: {
-    background: `repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.2),
-      rgba(255, 255, 255, 0.2) 1px,
-      transparent 1px,
-      transparent 4px
-    )`
-  },
-  headerRuler: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '8px',
-    background: `
-      linear-gradient(90deg, #ffffff 1px, transparent 1px) 0 bottom / 20px 100%,
-      linear-gradient(90deg, #ffffff 1px, transparent 1px) 0 bottom / 4px 40%
-    `,
-    backgroundRepeat: 'repeat-x'
-  },
-  sectionHeaderBg: {
-    background: `repeating-linear-gradient(
-      -45deg,
-      rgba(255,255,255,0.05),
-      rgba(255,255,255,0.05) 1px,
-      transparent 1px,
-      transparent 4px
-    )`
-  },
-  rangeTrackRuler: {
-    position: 'absolute',
-    top: '50%',
-    left: 0,
-    width: '100%',
-    height: '4px',
-    marginTop: '-2px',
-    background: 'rgba(255, 255, 255, 0.2)',
-    backgroundImage: 'linear-gradient(90deg, #ffffff 1px, transparent 1px)',
-    backgroundSize: '10% 100%',
-    zIndex: 1
-  },
-  barPattern: {
-    content: '""',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 3px)',
-    opacity: 0.4
-  }
-};
-
-const MONO = "'Space Mono', 'Courier New', monospace";
-const DIM = 'rgba(255, 255, 255, 0.5)';
-const BORDER_DIM = '1px solid rgba(255, 255, 255, 0.3)';
-
+// ─── Utilities ────────────────────────────────────────────────────
 function computeP95(distribution) {
   if (!distribution || distribution.length === 0) return null;
   const sorted = [...distribution].sort((a, b) => a - b);
@@ -132,435 +68,8 @@ function computeP95(distribution) {
   return sorted[Math.min(idx, sorted.length - 1)];
 }
 
-function getFundColor(funds, fundId) {
-  const idx = funds.findIndex((f) => f.id === fundId);
-  return FUND_COLORS[idx % FUND_COLORS.length];
-}
-
-const Header = () => (
-  <header style={{ height: '48px', borderBottom: '1px solid #ffffff', display: 'flex', alignItems: 'center', padding: '0 16px', justifyContent: 'space-between', flexShrink: 0, position: 'relative' }}>
-    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-      <div style={{ ...customStyles.patternLines, width: '24px', height: '24px', border: '1px solid #ffffff' }}></div>
-      <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: MONO, fontWeight: 700 }}>Monaco Fund Strategy Simulator</span>
-    </div>
-    <div style={{ fontFamily: MONO, color: DIM, fontSize: '10px' }}>
-      FUND SIMULATOR v2.0
-    </div>
-    <div style={customStyles.headerRuler}></div>
-  </header>
-);
-
-const SectionHeader = ({ number, label }) => (
-  <div style={{ padding: '8px 16px', borderBottom: '1px solid #ffffff', fontFamily: MONO, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0, ...customStyles.sectionHeaderBg }}>
-    <span style={{ marginRight: '8px' }}>{number}</span> {label}
-  </div>
-);
-
-const SliderControl = ({ label, value, onChange, min, max, step, suffix, display }) => (
-  <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-    <label style={{ fontSize: '11px', color: DIM, display: 'flex', justifyContent: 'space-between' }}>
-      <span>{label}</span>
-      <span style={{ color: '#ffffff', fontFamily: MONO }}>{display || value}{suffix || ''}</span>
-    </label>
-    <div style={{ position: 'relative', height: '24px', display: 'flex', alignItems: 'center' }}>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={{ WebkitAppearance: 'none', width: '100%', background: 'transparent', position: 'relative', zIndex: 2 }}
-      />
-      <div style={customStyles.rangeTrackRuler}></div>
-    </div>
-  </div>
-);
-
-const NumberControl = ({ label, value, onChange, min, max, step, suffix }) => (
-  <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-    <label style={{ fontSize: '11px', color: DIM }}>{label}</label>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '6px 8px', fontFamily: MONO, fontSize: '12px', width: '100%', outline: 'none' }}
-      />
-      {suffix && <span style={{ fontFamily: MONO, fontSize: '11px', color: DIM, whiteSpace: 'nowrap' }}>{suffix}</span>}
-    </div>
-  </div>
-);
-
-const ButtonGroupControl = ({ label, value, onChange, options }) => (
-  <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-    <label style={{ fontSize: '11px', color: DIM }}>{label}</label>
-    <div style={{ display: 'flex', gap: '4px' }}>
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          style={{
-            flex: 1,
-            background: value === opt.value ? '#ffffff' : 'transparent',
-            color: value === opt.value ? '#000000' : DIM,
-            border: '1px solid rgba(255, 255, 255, 0.3)',
-            fontFamily: MONO,
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            padding: '6px 4px',
-            cursor: 'pointer',
-            transition: 'all 0.15s'
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
-const FundTabs = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund }) => (
-  <div style={{ display: 'flex', borderBottom: '1px solid #ffffff', background: '#000000', flexShrink: 0 }}>
-    {funds.map((fund, fi) => {
-      const isActive = fund.id === activeFundId;
-      const color = FUND_COLORS[fi % FUND_COLORS.length];
-      return (
-        <div
-          key={fund.id}
-          onClick={() => onSelectFund(fund.id)}
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '8px 8px',
-            cursor: 'pointer',
-            background: isActive ? color.bg : 'transparent',
-            color: isActive ? color.main : DIM,
-            fontFamily: MONO,
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            borderRight: '1px solid rgba(255, 255, 255, 0.3)',
-            borderBottom: isActive ? `2px solid ${color.main}` : '2px solid transparent',
-            transition: 'all 0.15s',
-            position: 'relative',
-            userSelect: 'none',
-          }}
-        >
-          <span style={{ fontWeight: isActive ? 700 : 400 }}>{fund.name}</span>
-          {funds.length > 1 && (
-            <span
-              onClick={(e) => { e.stopPropagation(); onRemoveFund(fund.id); }}
-              style={{
-                fontSize: '13px',
-                lineHeight: '1',
-                opacity: 0.5,
-                cursor: 'pointer',
-                padding: '0 2px',
-              }}
-            >
-              ×
-            </span>
-          )}
-        </div>
-      );
-    })}
-    {funds.length < 4 && (
-      <button
-        onClick={onAddFund}
-        style={{
-          width: '36px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          border: 'none',
-          borderRight: 'none',
-          color: DIM,
-          fontFamily: MONO,
-          fontSize: '16px',
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-        }}
-      >
-        +
-      </button>
-    )}
-  </div>
-);
-
-const StageAllocationControl = ({ stageAllocations, onStageAllocationsChange }) => {
-  const valuations = getStageValuations();
-  const totalPct = ENTRY_STAGES.reduce((sum, s) => sum + (stageAllocations[s]?.pct || 0), 0);
-
-  const updateStage = (stage, field, value) => {
-    const updated = {};
-    for (const s of ENTRY_STAGES) {
-      updated[s] = { ...(stageAllocations[s] || { pct: 0, check_size: 1 }) };
-    }
-    updated[stage] = { ...updated[stage], [field]: value };
-    onStageAllocationsChange(updated);
-  };
-
-  return (
-    <div style={{ padding: '12px 16px', borderBottom: BORDER_DIM, display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-        <label style={{ fontSize: '11px', color: DIM }}>STAGE ALLOCATION</label>
-        <span style={{ fontFamily: MONO, fontSize: '10px', color: totalPct === 100 ? 'rgba(255,255,255,0.4)' : '#ff6666' }}>
-          {totalPct}%{totalPct !== 100 ? ' (must = 100%)' : ''}
-        </span>
-      </div>
-      {ENTRY_STAGES.map((stage) => {
-        const alloc = stageAllocations[stage] || { pct: 0, check_size: 1 };
-        const val = valuations[stage] || 1;
-        const ownership = ((alloc.check_size / val) * 100).toFixed(1);
-        const isActive = alloc.pct > 0;
-        return (
-          <div key={stage} style={{ opacity: isActive ? 1 : 0.3, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM, width: '60px', flexShrink: 0 }}>{stage.toUpperCase().replace('SERIES ', 'Ser ')}</span>
-              <input
-                type="number"
-                value={alloc.pct}
-                min={0} max={100} step={5}
-                onChange={(e) => updateStage(stage, 'pct', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#ffffff', padding: '3px 4px', fontFamily: MONO, fontSize: '11px', width: '44px', textAlign: 'right', outline: 'none' }}
-              />
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM }}>%</span>
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM, marginLeft: '4px' }}>$</span>
-              <input
-                type="number"
-                value={alloc.check_size}
-                min={0.1} max={50} step={0.25}
-                disabled={!isActive}
-                onChange={(e) => updateStage(stage, 'check_size', parseFloat(e.target.value) || 0.1)}
-                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#ffffff', padding: '3px 4px', fontFamily: MONO, fontSize: '11px', width: '50px', textAlign: 'right', outline: 'none' }}
-              />
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: DIM }}>M</span>
-            </div>
-            {isActive && (
-              <div style={{ fontFamily: MONO, fontSize: '9px', color: DIM, marginTop: '2px', marginLeft: '68px' }}>
-                {ownership}% own @ ${val}M val
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const Sidebar = ({ funds, activeFundId, onSelectFund, onAddFund, onRemoveFund, onUpdateConfig, marketScenario, onMarketScenarioChange, numPeriods, onNumPeriodsChange, numIterations, onNumIterationsChange }) => {
-  const activeFund = funds.find((f) => f.id === activeFundId);
-  if (!activeFund) return null;
-  const config = activeFund.config;
-
-  const setField = (field, value) => {
-    onUpdateConfig(activeFundId, { ...config, [field]: value });
-  };
-
-  return (
-    <aside style={{ width: '320px', minWidth: '320px', borderRight: '1px solid #ffffff', display: 'flex', flexDirection: 'column', background: '#000000', zIndex: 10, minHeight: 0 }}>
-      {/* Global settings */}
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid #ffffff', flexShrink: 0, background: 'rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <label style={{ fontSize: '10px', color: DIM, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: MONO }}>Global Settings</label>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {[
-            { value: 'BELOW_MARKET', label: 'Bear' },
-            { value: 'MARKET', label: 'Market' },
-            { value: 'ABOVE_MARKET', label: 'Bull' },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => onMarketScenarioChange(opt.value)}
-              style={{
-                flex: 1,
-                background: marketScenario === opt.value ? '#ffffff' : 'transparent',
-                color: marketScenario === opt.value ? '#000000' : DIM,
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                fontFamily: MONO,
-                fontSize: '10px',
-                textTransform: 'uppercase',
-                padding: '5px 4px',
-                cursor: 'pointer',
-                transition: 'all 0.15s'
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <a href="#/markets" style={{ fontFamily: MONO, fontSize: '9px', color: DIM, textDecoration: 'none', letterSpacing: '0.05em', textAlign: 'right' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = DIM; }}
-        >EDIT RATES &gt;</a>
-        <div>
-          <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>ITERATIONS</label>
-          <input
-            type="number"
-            value={numIterations}
-            min={100}
-            max={10000}
-            step={500}
-            onChange={(e) => onNumIterationsChange(parseInt(e.target.value) || 100)}
-            style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-          />
-        </div>
-      </div>
-
-      <FundTabs
-        funds={funds}
-        activeFundId={activeFundId}
-        onSelectFund={onSelectFund}
-        onAddFund={onAddFund}
-        onRemoveFund={onRemoveFund}
-      />
-
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <SectionHeader number="01" label="Fund Structure" />
-
-        <NumberControl
-          label="FUND SIZE ($M)"
-          value={config.fund_size_m}
-          onChange={(v) => setField('fund_size_m', v)}
-          min={1}
-          max={1000}
-          step={10}
-        />
-
-        <div style={{ display: 'flex', gap: '8px', padding: '8px 16px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>MGMT FEE (% / YR)</label>
-            <input
-              type="number"
-              value={config.management_fee_pct}
-              min={0}
-              max={10}
-              step={0.5}
-              onChange={(e) => setField('management_fee_pct', parseFloat(e.target.value) || 0)}
-              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '10px', color: DIM, display: 'block', marginBottom: '3px' }}>FEE DURATION (YRS)</label>
-            <input
-              type="number"
-              value={config.fee_duration_years}
-              min={0}
-              max={20}
-              step={1}
-              onChange={(e) => setField('fee_duration_years', parseInt(e.target.value) || 0)}
-              style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '5px 6px', fontFamily: MONO, fontSize: '11px', width: '100%', outline: 'none' }}
-            />
-          </div>
-        </div>
-
-        <SliderControl
-          label="RECYCLED CAPITAL"
-          value={config.recycled_capital_pct}
-          onChange={(v) => setField('recycled_capital_pct', v)}
-          min={0}
-          max={100}
-          step={5}
-          suffix="% of fund"
-        />
-
-        {(() => {
-          const fs = config.fund_size_m || 0;
-          const fees = fs * ((config.management_fee_pct ?? 2) / 100) * (config.fee_duration_years ?? 10);
-          const recycled = fs * ((config.recycled_capital_pct ?? 20) / 100);
-          const deployed = fs - fees + recycled;
-          return (
-            <div style={{ padding: '6px 16px 8px', fontFamily: MONO, fontSize: '10px', color: DIM, borderBottom: BORDER_DIM }}>
-              ${fs}M - ${fees.toFixed(1)}M fees + ${recycled.toFixed(1)}M recycled = <span style={{ color: '#ffffff' }}>${deployed.toFixed(1)}M</span> deployed
-            </div>
-          );
-        })()}
-
-        <SectionHeader number="02" label="Portfolio Investments" />
-
-        <SliderControl
-          label="FOLLOW-ON RESERVE"
-          value={config.dry_powder_reserve_for_pro_rata}
-          onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)}
-          min={0}
-          max={70}
-          step={5}
-          suffix="% of fund"
-        />
-
-        <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            id={`reinvest-${activeFundId}`}
-            checked={config.reinvest_unused_reserve !== false}
-            onChange={(e) => setField('reinvest_unused_reserve', e.target.checked)}
-            style={{ accentColor: '#ffffff', width: '12px', height: '12px', cursor: 'pointer' }}
-          />
-          <label htmlFor={`reinvest-${activeFundId}`} style={{ fontFamily: MONO, fontSize: '9px', color: DIM, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Re-invest unused reserve
-          </label>
-        </div>
-
-        <NumberControl
-          label="PRO-RATA MAX VALUATION ($M)"
-          value={config.pro_rata_max_valuation}
-          onChange={(v) => setField('pro_rata_max_valuation', v)}
-          min={0}
-          max={10000}
-          step={10}
-        />
-
-        <StageAllocationControl
-          stageAllocations={config.stage_allocations}
-          onStageAllocationsChange={(v) => setField('stage_allocations', v)}
-        />
-      </div>
-    </aside>
-  );
-};
-
-const Toolbar = ({ onRunSimulation, loading, fundCount }) => (
-  <div style={{ height: '40px', borderBottom: '1px solid #ffffff', display: 'flex', alignItems: 'center', padding: '0 16px', gap: '16px', flexShrink: 0 }}>
-    <div style={{ flex: 1 }}></div>
-    {loading && (
-      <div style={{ fontFamily: MONO, color: DIM, fontSize: '10px', animation: 'pulse 1.5s infinite' }}>
-        COMPUTING...
-      </div>
-    )}
-    <div style={{ fontFamily: MONO, color: DIM, fontSize: '10px' }}>
-      {fundCount} FUND{fundCount > 1 ? 'S' : ''}
-    </div>
-    <button
-      onClick={onRunSimulation}
-      disabled={loading}
-      style={{
-        background: loading ? 'rgba(255,255,255,0.3)' : '#ffffff',
-        color: '#000000',
-        border: '1px solid #ffffff',
-        fontFamily: MONO,
-        fontSize: '11px',
-        textTransform: 'uppercase',
-        padding: '6px 12px',
-        cursor: loading ? 'not-allowed' : 'pointer',
-        transition: 'all 0.2s'
-      }}
-    >
-      {loading ? 'RUNNING...' : 'RUN SIMULATION'}
-    </button>
-  </div>
-);
-
-function buildHistogram(distribution, numBins = 20) {
-  if (!distribution || distribution.length === 0) {
-    return { bins: [], labels: [] };
-  }
+function buildHistogram(distribution, numBins = 24) {
+  if (!distribution || distribution.length === 0) return { bins: [], labels: [] };
   const CAP = 10;
   const binWidth = CAP / numBins;
   const counts = new Array(numBins).fill(0);
@@ -583,15 +92,493 @@ function buildHistogram(distribution, numBins = 20) {
       labels.push('');
     }
   }
-  return { bins, labels, counts, binWidth, minVal: 0 };
+  return { bins, labels };
 }
 
+function deepCloneAllocations(allocs) {
+  const out = {};
+  for (const [k, v] of Object.entries(allocs || {})) out[k] = { ...v };
+  return out;
+}
+
+function deepCloneConfig(cfg) {
+  return { ...cfg, stage_allocations: deepCloneAllocations(cfg.stage_allocations) };
+}
+
+// ─── Saved strategies helpers ─────────────────────────────────────
+let nextStrategyId = 1;
+
+function loadSavedStrategies() {
+  try {
+    const raw = localStorage.getItem('monaco_saved_strategies');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        nextStrategyId = Math.max(...parsed.map((s) => s.id)) + 1;
+        return parsed.map((s) => ({ ...s, config: migrateConfig(s.config) }));
+      }
+    }
+  } catch (e) {}
+  return [];
+}
+
+function persistStrategies(strategies) {
+  localStorage.setItem('monaco_saved_strategies', JSON.stringify(strategies));
+}
+
+function strategyCode(index) {
+  return String.fromCharCode(65 + (index % 26));
+}
+
+function summarizeConfig(config) {
+  const activeStages = ENTRY_STAGES.filter((s) => (config.stage_allocations?.[s]?.pct || 0) > 0);
+  const checks = activeStages.map((s) => `$${config.stage_allocations[s].check_size}M`);
+  const stageAbbrevs = { 'Pre-seed': 'PS', 'Seed': 'S', 'Series A': 'A', 'Series B': 'B' };
+  const stages = activeStages.map((s) => stageAbbrevs[s] || s).join(', ');
+  return {
+    checkSize: checks.length > 0 ? checks.join(' – ') : '—',
+    reserves: `${config.dry_powder_reserve_for_pro_rata || 0}%`,
+    fundSize: `$${config.fund_size_m || 0}M`,
+    stages: stages || '—',
+  };
+}
+
+function buildSimPayload(config, marketScenario, numIterations) {
+  const { stage_allocations, ...rest } = config;
+  const valuations = getStageValuations();
+  const checkSizes = {};
+  const ownershipPcts = {};
+  const allocationPcts = {};
+  for (const [stage, alloc] of Object.entries(stage_allocations || {})) {
+    if (alloc.pct > 0) {
+      checkSizes[stage] = alloc.check_size;
+      ownershipPcts[stage] = alloc.check_size / (valuations[stage] || 1);
+      allocationPcts[stage] = alloc.pct;
+    }
+  }
+  const cfg = {
+    ...rest,
+    market_scenario: marketScenario,
+    num_periods: 8,
+    num_iterations: numIterations,
+    check_sizes_at_entry: checkSizes,
+    ownership_percentages_at_entry: ownershipPcts,
+    stage_allocation_pcts: allocationPcts,
+  };
+  const storedRates = localStorage.getItem('monaco_custom_graduation_rates');
+  if (storedRates) {
+    const customRates = JSON.parse(storedRates);
+    if (customRates[marketScenario]) cfg.graduation_rates = customRates[marketScenario];
+  }
+  const storedVals = localStorage.getItem('monaco_custom_stage_valuations');
+  if (storedVals) cfg.stage_valuations = JSON.parse(storedVals);
+  const storedMna = localStorage.getItem('monaco_custom_mna_outcomes');
+  if (storedMna) cfg.m_and_a_outcomes = JSON.parse(storedMna);
+  return cfg;
+}
+
+// ─── Style Constants ──────────────────────────────────────────────
+const MONO = "'JetBrains Mono', monospace";
+
+// ─── Reusable Components ──────────────────────────────────────────
+const InputGroup = ({ label, value, onChange, type = 'text', rightLabel }) => (
+  <div className="input-group">
+    <label className="input-label">
+      <span>{label}</span>
+      {rightLabel && <span className="mono">{rightLabel}</span>}
+    </label>
+    <input type={type} className="input-field" value={value} onChange={onChange} />
+  </div>
+);
+
+const SliderInput = ({ label, value, onChange, min, max, step = 1, unit = '' }) => (
+  <div className="slider-container">
+    <div className="slider-header">
+      <span>{label}</span>
+      <span className="mono">{value}{unit}</span>
+    </div>
+    <div className="range-wrapper">
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} />
+    </div>
+  </div>
+);
+
+const NumberInput = ({ label, value, onChange, min, max, step = 1, unit = '', disabled = false }) => (
+  <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+    <label className="input-label">
+      <span>{label}</span>
+      {unit && <span className="mono">{unit}</span>}
+    </label>
+    <input type="number" className="input-field" value={value} min={min} max={max} step={step}
+      disabled={disabled} style={{ width: '100%', boxSizing: 'border-box', ...(disabled ? { opacity: 0.45, cursor: 'not-allowed', background: '#f5f5f5' } : {}) }}
+      onChange={(e) => onChange(parseFloat(e.target.value) || 0)} />
+  </div>
+);
+
+const IterationsInput = ({ value, onChange }) => {
+  const [local, setLocal] = useState(String(value));
+  useEffect(() => { setLocal(String(value)); }, [value]);
+  const commit = () => {
+    const n = parseInt(local, 10);
+    if (!isNaN(n) && n >= 100) onChange(n);
+    else { onChange(value); setLocal(String(value)); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span style={{ fontFamily: MONO, fontSize: '11px', color: '#999' }}>N=</span>
+      <input
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value.replace(/[^0-9]/g, ''))}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.target.blur(); } }}
+        style={{ width: '68px', padding: '4px 6px', fontFamily: MONO, fontSize: '11px', border: '1px solid var(--ink)', background: 'var(--paper)', color: 'var(--ink)', outline: 'none', textAlign: 'right' }}
+      />
+    </div>
+  );
+};
+
+const StrategyCard = ({ name, code, checkSize, reserves, fundSize, stages, isActive, hasResults, isStale, onClick, onDelete, onNameChange }) => (
+  <div className={`strategy-card ${isActive ? 'active' : ''}`} onClick={onClick}>
+    <div className="strategy-card-header">
+      {isActive && onNameChange ? (
+        <input
+          type="text" value={name}
+          onChange={(e) => onNameChange(e.target.value.toUpperCase())}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          style={{ font: 'inherit', fontWeight: 700, border: 'none', borderBottom: '1px dashed var(--ink)', outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', marginRight: '8px' }}
+          autoFocus
+        />
+      ) : (
+        <strong>{name}</strong>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        {hasResults && !isStale && <span style={{ fontSize: '9px', color: '#16a34a', fontWeight: 600, letterSpacing: '0.05em' }}>RAN</span>}
+        {isStale && <span style={{ fontSize: '9px', color: '#ca8a04', fontWeight: 600, letterSpacing: '0.05em' }}>STALE</span>}
+        {onDelete && (
+          <span className="card-delete" onClick={(e) => { e.stopPropagation(); onDelete(); }}>×</span>
+        )}
+      </div>
+    </div>
+    <div className="metric-row"><span>Fund Size</span><span className="mono">{fundSize}</span></div>
+    <div className="metric-row"><span>Check Size</span><span className="mono">{checkSize}</span></div>
+    <div className="metric-row"><span>Reserves</span><span className="mono">{reserves}</span></div>
+    <div className="metric-row"><span>Stages</span><span className="mono">{stages}</span></div>
+  </div>
+);
+
+const ComparisonCard = ({ name, fundSize, stages, color, isSelected, hasResults, onClick }) => (
+  <div onClick={onClick} style={{
+    display: 'flex', flexDirection: 'column', gap: '2px',
+    padding: '8px 12px', border: '1px solid var(--ink)', cursor: 'pointer',
+    borderLeft: isSelected ? `3px solid ${color.main}` : '1px solid var(--ink)',
+    opacity: isSelected ? 1 : 0.35, transition: 'opacity 0.15s, border 0.15s',
+    minWidth: '120px', background: isSelected ? color.bg : 'transparent',
+  }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontWeight: 700, fontSize: '12px', color: color.main, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{name}</span>
+      {hasResults && <span style={{ fontSize: '8px', color: '#16a34a', fontWeight: 600 }}>RAN</span>}
+    </div>
+    <div style={{ fontFamily: MONO, fontSize: '10px', color: '#666' }}>
+      {fundSize} &middot; {stages}
+    </div>
+  </div>
+);
+
+const StatBox = ({ value, label }) => (
+  <div className="stat-box">
+    <span className="stat-value">{value}</span>
+    <span className="stat-label">{label}</span>
+  </div>
+);
+
+// ─── Stage Allocation Table ───────────────────────────────────────
+const StageAllocationTable = ({ stageAllocations, onStageAllocationsChange }) => {
+  const valuations = getStageValuations();
+  const totalPct = ENTRY_STAGES.reduce((sum, s) => sum + (stageAllocations[s]?.pct || 0), 0);
+
+  const updateStage = (stage, field, value) => {
+    const updated = {};
+    for (const s of ENTRY_STAGES) updated[s] = { ...(stageAllocations[s] || { pct: 0, check_size: 1 }) };
+    updated[stage] = { ...updated[stage], [field]: value };
+    onStageAllocationsChange(updated);
+  };
+
+  const thStyle = { textAlign: 'right', padding: '3px 2px', fontSize: '9px', fontWeight: 600, color: '#666', whiteSpace: 'nowrap' };
+  const tdStyle = { padding: '3px 2px', textAlign: 'right' };
+  const readonlyTd = { padding: '3px 2px', textAlign: 'right', fontSize: '10px', color: '#666' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="input-label" style={{ marginBottom: 0, fontSize: '11px' }}>STAGE ALLOCATION</span>
+        <span className="mono" style={{ fontSize: '10px', color: totalPct === 100 ? '#999' : '#dc2626' }}>
+          {totalPct}%{totalPct !== 100 ? ' (≠100%)' : ''}
+        </span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: '11px' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--ink)' }}>
+            <th style={{ ...thStyle, textAlign: 'left' }}>STAGE</th>
+            <th style={thStyle}>%</th>
+            <th style={thStyle}>CHECK</th>
+            <th style={thStyle}>OWN</th>
+            <th style={thStyle}>VAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ENTRY_STAGES.map((stage) => {
+            const alloc = stageAllocations[stage] || { pct: 0, check_size: 1 };
+            const val = valuations[stage] || 1;
+            const ownership = ((alloc.check_size / val) * 100).toFixed(1);
+            const isActive = alloc.pct > 0;
+            return (
+              <tr key={stage} style={{ opacity: isActive ? 1 : 0.35, borderBottom: '1px solid var(--trace)' }}>
+                <td style={{ padding: '3px 0', fontSize: '10px' }}>{stage}</td>
+                <td style={tdStyle}>
+                  <input type="number" value={alloc.pct} min={0} max={100} step={5}
+                    onChange={(e) => updateStage(stage, 'pct', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                    className="input-field compact" style={{ width: '40px', textAlign: 'right', padding: '3px 4px', fontSize: '11px' }} />
+                </td>
+                <td style={tdStyle}>
+                  <input type="number" value={alloc.check_size} min={0.1} max={50} step={0.25}
+                    disabled={!isActive}
+                    onChange={(e) => updateStage(stage, 'check_size', parseFloat(e.target.value) || 0.1)}
+                    className="input-field compact" style={{ width: '48px', textAlign: 'right', padding: '3px 4px', fontSize: '11px' }} />
+                </td>
+                <td style={readonlyTd}>{isActive ? `${ownership}%` : '—'}</td>
+                <td style={readonlyTd}>{isActive ? `$${val}` : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── Portfolio Breakdown Tooltip ──────────────────────────────────
+const BreakdownTooltip = ({ breakdown, label, x, y }) => {
+  if (!breakdown || !breakdown.segments) return null;
+  const positiveSegs = breakdown.segments.filter((s) => s.type !== 'failed' && s.value > 0);
+  const failedSeg = breakdown.segments.find((s) => s.type === 'failed');
+  const allSegs = [...positiveSegs, ...(failedSeg ? [failedSeg] : [])];
+  if (allSegs.length === 0) return null;
+
+  const totalValue = positiveSegs.reduce((sum, s) => sum + s.value, 0);
+  const maxPosVal = Math.max(...positiveSegs.map((s) => s.value), 1);
+  const maxNegVal = failedSeg ? failedSeg.value : 0;
+  const barW = 28;
+  const barGap = 6;
+  const chartW = allSegs.length * (barW + barGap) - barGap;
+  const posH = 100;
+  const negH = maxNegVal > 0 ? Math.min((maxNegVal / maxPosVal) * posH, 50) : 0;
+  const headerH = 32;
+  const labelH = 48;
+  const svgW = chartW + 20;
+  const svgH = headerH + posH + negH + labelH;
+  const baseline = headerH + posH;
+
+  const segColor = (s) => s.type === 'acquired' ? '#16a34a' : s.type === 'failed' ? '#dc2626' : '#000000';
+
+  return (
+    <div style={{
+      position: 'fixed', right: `calc(100vw - ${x - 20}px)`, top: y - svgH / 2, zIndex: 1000,
+      background: 'var(--paper)', border: '1px solid var(--ink)', boxShadow: '4px 4px 0 var(--ink)',
+      padding: '10px 12px', fontFamily: MONO, fontSize: '9px', pointerEvents: 'none',
+    }}>
+      <div style={{ color: 'var(--ink)', fontSize: '9px', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+        {label} PORTFOLIO BREAKDOWN
+      </div>
+      <div style={{ color: '#666', fontSize: '10px', marginBottom: '6px', fontWeight: 500 }}>
+        Avg Portfolio Value: <span style={{ color: 'var(--ink)', fontWeight: 700 }}>${totalValue.toFixed(1)}M</span>
+      </div>
+      <svg width={svgW} height={svgH}>
+        {/* Baseline */}
+        <line x1={6} y1={baseline} x2={svgW - 6} y2={baseline} stroke="rgba(0,0,0,0.3)" strokeWidth="1" />
+
+        {allSegs.map((seg, i) => {
+          const bx = 10 + i * (barW + barGap);
+          const col = segColor(seg);
+          const isFailed = seg.type === 'failed';
+
+          if (isFailed) {
+            const barH = negH > 0 && maxNegVal > 0 ? (seg.value / maxNegVal) * negH : 0;
+            return (
+              <g key={i}>
+                <rect x={bx} y={baseline} width={barW} height={Math.max(barH, 1)}
+                  fill="none" stroke={col} strokeWidth="1" rx="1" strokeDasharray="3,2" />
+                <text x={bx + barW / 2} y={baseline + barH + 12} fill={col} fontSize="7" fontFamily={MONO} textAnchor="middle" fontWeight="700">
+                  -${seg.value.toFixed(0)}M
+                </text>
+                <text x={bx + barW / 2} y={baseline + barH + 24} fill="#999" fontSize="7" fontFamily={MONO} textAnchor="middle">
+                  {seg.label}
+                </text>
+                <text x={bx + barW / 2} y={baseline + barH + 36} fill="#999" fontSize="6" fontFamily={MONO} textAnchor="middle">
+                  {seg.count.toFixed(1)} cos
+                </text>
+              </g>
+            );
+          }
+
+          const barH = maxPosVal > 0 ? (seg.value / maxPosVal) * posH : 0;
+          const barY = baseline - barH;
+          return (
+            <g key={i}>
+              <rect x={bx} y={barY} width={barW} height={Math.max(barH, 1)}
+                fill={col} stroke={col} strokeWidth="1" rx="1"
+                opacity={seg.type === 'alive' ? 0.7 : 1} />
+              <text x={bx + barW / 2} y={barY - 3} fill={col} fontSize="7" fontFamily={MONO} textAnchor="middle" fontWeight="700">
+                ${seg.value.toFixed(0)}M
+              </text>
+              <text x={bx + barW / 2} y={baseline + 12} fill="#999" fontSize="7" fontFamily={MONO} textAnchor="middle">
+                {seg.label.replace('Series ', 'S')}
+              </text>
+              <text x={bx + barW / 2} y={baseline + 24} fill="#999" fontSize="6" fontFamily={MONO} textAnchor="middle">
+                {seg.count.toFixed(1)} cos
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// ─── Histogram (single strategy with percentile lines) ───────────
+function computePercentile(distribution, p) {
+  if (!distribution || distribution.length === 0) return null;
+  const sorted = [...distribution].sort((a, b) => a - b);
+  const idx = Math.floor(sorted.length * p);
+  return sorted[Math.min(idx, sorted.length - 1)];
+}
+
+const HIST_PERCENTILES = [
+  { p: 0.25, label: 'P25', color: '#999', dash: '4,3' },
+  { p: 0.50, label: 'MEDIAN', color: '#000000', dash: '' },
+  { p: 0.75, label: 'P75', color: '#16a34a', dash: '4,3' },
+  { p: 0.90, label: 'P90', color: '#2563eb', dash: '4,3' },
+];
+
+const Histogram = ({ result, color }) => {
+  const distribution = result?.moic_distribution;
+  const binBreakdowns = result?.results?.bin_breakdowns;
+  const { bins, labels } = buildHistogram(distribution, 24);
+  const hasData = bins.length > 0;
+  const barColor = color?.main || '#2563eb';
+  const [tooltip, setTooltip] = useState(null);
+  const [hoveredBin, setHoveredBin] = useState(null);
+
+  const CAP = 10;
+  const NUM_BINS = 24;
+  const binWidth = CAP / NUM_BINS;
+
+  // Compute percentile positions as fraction across the histogram (0..1)
+  const percentileLines = hasData ? HIST_PERCENTILES.map((hp) => {
+    const val = computePercentile(distribution, hp.p);
+    if (val == null) return null;
+    const frac = Math.min(val / CAP, 1);
+    return { ...hp, val, frac };
+  }).filter(Boolean) : [];
+
+  const handleBarEnter = (e, binIndex) => {
+    setHoveredBin(binIndex);
+    const bd = binBreakdowns?.[binIndex];
+    if (!bd) return;
+    const lo = (binIndex * binWidth).toFixed(1);
+    const hi = ((binIndex + 1) * binWidth).toFixed(1);
+    setTooltip({ breakdown: bd, label: `${lo}x – ${hi}x`, x: e.clientX, y: e.clientY });
+  };
+
+  const handleBarLeave = () => {
+    setHoveredBin(null);
+    setTooltip(null);
+  };
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {!hasData ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: '13px', color: '#999' }}>
+          RUN SIMULATION TO VIEW DISTRIBUTION
+        </div>
+      ) : (
+        <>
+          {/* Y-axis labels */}
+          <div style={{ position: 'absolute', top: '28px', left: '0', bottom: '24px', width: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'flex-end', padding: '4px 2px', pointerEvents: 'none', zIndex: 3 }}>
+            <span style={{ fontFamily: MONO, fontSize: '8px', color: '#bbb' }}>MAX</span>
+            <span style={{ fontFamily: MONO, fontSize: '8px', color: '#bbb' }}>0</span>
+          </div>
+
+          {/* Chart area */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', padding: '28px 24px 0 28px', gap: '2px', position: 'relative' }}>
+            {bins.map((height, i) => (
+              <div key={i} style={{
+                flex: 1, height: `${Math.max(height, 1)}%`, background: barColor,
+                opacity: hoveredBin === i ? 1 : 0.7,
+                borderRadius: '1px 1px 0 0', minHeight: '1px', transition: 'height 0.3s ease, opacity 0.15s ease',
+                position: 'relative', zIndex: 1, cursor: binBreakdowns?.[i] ? 'pointer' : 'default',
+              }}
+                onMouseEnter={(e) => handleBarEnter(e, i)}
+                onMouseMove={(e) => setTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                onMouseLeave={handleBarLeave}
+              />
+            ))}
+
+            {/* Percentile vertical lines (no hover — just visual markers) */}
+            {percentileLines.map((pl) => (
+              <div key={pl.label} style={{
+                position: 'absolute',
+                left: `${pl.frac * 100}%`,
+                top: 0, bottom: 0,
+                zIndex: 2, pointerEvents: 'none',
+              }}>
+                <div style={{
+                  position: 'absolute', left: 0, top: 0, bottom: 0,
+                  borderLeft: `2px ${pl.dash ? 'dashed' : 'solid'} ${pl.color}`,
+                }} />
+                <div style={{
+                  position: 'absolute', top: '-2px', left: '4px',
+                  fontFamily: MONO, fontSize: '9px', fontWeight: 600,
+                  color: pl.color, whiteSpace: 'nowrap',
+                  background: 'rgba(255,255,255,0.85)', padding: '1px 4px',
+                }}>
+                  {pl.label} {pl.val.toFixed(2)}x
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* X-axis labels */}
+          <div style={{ fontFamily: MONO, fontSize: '10px', display: 'flex', justifyContent: 'space-between', padding: '6px 24px 4px 28px', borderTop: '1px solid var(--trace)', color: '#999' }}>
+            {labels.map((l, i) => <span key={i} style={{ flex: 1, textAlign: 'center' }}>{l}</span>)}
+          </div>
+
+          {/* Percentile legend */}
+          <div style={{ display: 'flex', gap: '16px', padding: '2px 28px 8px', flexWrap: 'wrap' }}>
+            {HIST_PERCENTILES.map((hp) => (
+              <div key={hp.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ width: '16px', height: '0', borderTop: `2px ${hp.dash ? 'dashed' : 'solid'} ${hp.color}` }} />
+                <span style={{ fontFamily: MONO, fontSize: '9px', color: hp.color, fontWeight: 600 }}>{hp.label}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Tooltip */}
+      {tooltip && <BreakdownTooltip breakdown={tooltip.breakdown} label={tooltip.label} x={tooltip.x} y={tooltip.y} />}
+    </div>
+  );
+};
+
+// ─── Comparison Dot Plot ──────────────────────────────────────────
 const PERCENTILE_KEYS = [
   { key: 'p25_moic', label: 'P25', color: null, filled: false },
-  { key: 'median_moic', label: 'P50', color: '#ffffff', filled: true },
-  { key: 'p75_moic', label: 'P75', color: '#4ade80', filled: true },
-  { key: 'p90_moic', label: 'P90', color: '#60a5fa', filled: true },
-  { key: 'p95_moic', label: 'P95', color: '#ffffff', filled: false },
+  { key: 'median_moic', label: 'P50', color: '#999', filled: true },
+  { key: 'p75_moic', label: 'P75', color: '#16a34a', filled: true },
+  { key: 'p90_moic', label: 'P90', color: '#2563eb', filled: true },
+  { key: 'p95_moic', label: 'P95', color: '#000000', filled: false },
 ];
 
 function niceMax(value) {
@@ -608,674 +595,840 @@ function generateTicks(maxVal) {
   const nice = niceMax(maxVal);
   const step = nice / 5;
   const ticks = [];
-  for (let v = 0; v <= nice; v += step) {
-    ticks.push(Math.round(v * 100) / 100);
-  }
+  for (let v = 0; v <= nice; v += step) ticks.push(Math.round(v * 100) / 100);
   return { ticks, axisMax: nice };
 }
 
-const DotPlot = ({ funds, fundResults, activeFundId, onSelectFund }) => {
-  const fundData = funds
-    .map((fund, fi) => {
-      const res = fundResults[fund.id];
-      if (!res) return null;
-      const p95 = computeP95(res.moic_distribution);
+const PERCENTILE_TO_BREAKDOWN = {
+  p25_moic: 'p25', median_moic: 'p50', p75_moic: 'p75', p90_moic: 'p90', p95_moic: 'p95',
+};
+
+const ComparisonDotPlot = ({ strategies }) => {
+  const [tooltip, setTooltip] = useState(null);
+
+  const stageAbbrevs = { 'Pre-seed': 'PS', 'Seed': 'S', 'Series A': 'A', 'Series B': 'B' };
+
+  const withResults = strategies
+    .map((s, i) => {
+      if (!s.results) return null;
+      const r = s.results;
+      const p95 = computeP95(r.moic_distribution);
+      const activeStages = ENTRY_STAGES.filter((st) => (s.config.stage_allocations?.[st]?.pct || 0) > 0);
+      const ci = s._colorIndex != null ? s._colorIndex : i;
       return {
-        id: fund.id,
-        name: fund.name,
-        color: FUND_COLORS[fi % FUND_COLORS.length],
-        p25: res.results.p25_moic,
-        p50: res.results.median_moic,
-        p75: res.results.p75_moic,
-        p90: res.results.p90_moic,
-        p95: p95 != null ? p95 : res.results.p90_moic,
+        id: s.id, name: s.name, code: s.code,
+        color: STRATEGY_COLORS[ci % STRATEGY_COLORS.length],
+        p25: r.results.p25_moic, p50: r.results.median_moic,
+        p75: r.results.p75_moic, p90: r.results.p90_moic,
+        p95: p95 != null ? p95 : r.results.p90_moic,
+        breakdown: r.results.portfolio_breakdown,
+        fundSize: `$${s.config.fund_size_m || 0}M`,
+        stages: activeStages.map((st) => stageAbbrevs[st] || st).join(', ') || '—',
+        entryOwn: r.results.avg_entry_ownership != null ? `${r.results.avg_entry_ownership.toFixed(1)}%` : '—',
+        portfolioSize: r.results.avg_total_companies != null ? `${r.results.avg_total_companies.toFixed(0)}` : '—',
       };
     })
     .filter(Boolean);
 
-  const [tooltip, setTooltip] = useState(null);
-
-  const hasData = fundData.length > 0;
-  const allMax = hasData ? Math.max(...fundData.map((d) => d.p95)) : 10;
+  const hasData = withResults.length > 0;
+  const allMax = hasData ? Math.max(...withResults.map((d) => d.p95)) : 10;
   const { ticks, axisMax } = generateTicks(allMax * 1.1);
 
-  const PAD = 40;
   const VW = 700;
-  const VH = 700;
-  const LEFT_PAD = PAD;
-  const RIGHT_PAD = PAD;
-  const TOP_PAD = PAD;
-  const BOTTOM_LABEL = PAD;
+  const VH = 500;
+  const LEFT_PAD = 100;
+  const RIGHT_PAD = 30;
+  const TOP_PAD = 40;
+  const BOTTOM_LABEL = 100;
   const LEGEND_H = 24;
   const chartTop = TOP_PAD + LEGEND_H;
   const chartBottom = VH - BOTTOM_LABEL;
   const chartH = chartBottom - chartTop;
-  const colWidth = fundData.length > 0 ? (VW - LEFT_PAD - RIGHT_PAD) / fundData.length : VW;
-
+  const colWidth = withResults.length > 0 ? (VW - LEFT_PAD - RIGHT_PAD) / withResults.length : VW;
   const toY = (val) => chartBottom - (chartH * val) / axisMax;
 
-  return (
-    <div style={{ border: '1px solid #ffffff', position: 'relative', display: 'flex', flexDirection: 'column', gridRow: '1 / -1' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, padding: '4px 8px', background: '#000000', borderBottom: '1px solid #ffffff', borderRight: '1px solid #ffffff', fontFamily: MONO, fontSize: '10px', zIndex: 5 }}>
-        MOIC PERCENTILES
-      </div>
+  const handleDotEnter = (e, strat, pKey) => {
+    const bKey = PERCENTILE_TO_BREAKDOWN[pKey];
+    const bd = strat.breakdown?.[bKey];
+    if (!bd) return;
+    const pLabel = PERCENTILE_KEYS.find((pk) => pk.key === pKey)?.label || pKey;
+    setTooltip({ breakdown: bd, label: `${strat.name} ${pLabel}`, x: e.clientX, y: e.clientY });
+  };
 
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {!hasData ? (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: '12px', color: DIM }}>
-            RUN SIMULATION TO VIEW DISTRIBUTION
-          </div>
-        ) : (
-          <svg
-            width="100%"
-            height="100%"
-            viewBox={`0 0 ${VW} ${VH}`}
-            preserveAspectRatio="xMidYMid meet"
-            style={{ display: 'block', width: '100%', height: '100%' }}
-          >
-            {/* Y-axis tick grid lines + labels */}
+  return (
+    <div style={{ flex: 1, position: 'relative', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {!hasData ? (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: '13px', color: '#999' }}>
+          RUN SIMULATIONS IN STRATEGY ENTRY TO COMPARE
+        </div>
+      ) : (
+        <>
+          <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', flex: 1, minHeight: 0 }}>
+            {/* Y-axis grid */}
             {ticks.map((tick) => {
               const y = toY(tick);
               return (
                 <g key={tick}>
-                  <line
-                    x1={LEFT_PAD} y1={y}
-                    x2={VW - RIGHT_PAD} y2={y}
-                    stroke="rgba(255,255,255,0.08)" strokeWidth="1"
-                  />
-                  <text
-                    x={LEFT_PAD - 8}
-                    y={y + 3}
-                    fill={DIM}
-                    fontFamily={MONO}
-                    fontSize="9"
-                    textAnchor="end"
-                  >
-                    {tick}x
-                  </text>
+                  <line x1={LEFT_PAD} y1={y} x2={VW - RIGHT_PAD} y2={y} stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
+                  <text x={LEFT_PAD - 8} y={y + 3} fill="#999" fontFamily={MONO} fontSize="9" textAnchor="end">{tick}x</text>
                 </g>
               );
             })}
 
-            {/* Percentile legend at top */}
+            {/* Percentile legend */}
             <g>
               {PERCENTILE_KEYS.map((p, i) => {
                 const lx = LEFT_PAD + i * 60;
                 const isMedian = p.key === 'median_moic';
-                const dotColor = p.color || '#ffffff';
+                const dotColor = p.color || '#999';
                 return (
                   <g key={p.key}>
-                    <circle
-                      cx={lx}
-                      cy={TOP_PAD + 6}
-                      r={isMedian ? 5 : 3.5}
-                      fill={p.filled ? dotColor : 'none'}
-                      stroke={dotColor}
-                      strokeWidth={p.filled ? 0 : 1.5}
-                    />
-                    <text
-                      x={lx + 10}
-                      y={TOP_PAD + 10}
-                      fill={p.color || DIM}
-                      fontFamily={MONO}
-                      fontSize="9"
-                    >
-                      {p.label}
-                    </text>
+                    <circle cx={lx} cy={TOP_PAD + 6} r={3.5}
+                      fill={p.filled ? dotColor : 'none'} stroke={dotColor} strokeWidth={p.filled ? 0 : 1.5} />
+                    <text x={lx + 10} y={TOP_PAD + 10} fill={p.color || '#999'} fontFamily={MONO} fontSize="9">{p.label}</text>
                   </g>
                 );
               })}
             </g>
 
-            {/* Fund columns */}
-            {fundData.map((fund, fi) => {
-              const cx = LEFT_PAD + fi * colWidth + colWidth / 2;
-              const c = fund.color;
-              const isSelected = fund.id === activeFundId;
-
-              const vals = {
-                p25_moic: fund.p25,
-                median_moic: fund.p50,
-                p75_moic: fund.p75,
-                p90_moic: fund.p90,
-                p95_moic: fund.p95,
-              };
+            {/* Strategy columns */}
+            {withResults.map((strat, si) => {
+              const cx = LEFT_PAD + si * colWidth + colWidth / 2;
+              const c = strat.color;
+              const vals = { p25_moic: strat.p25, median_moic: strat.p50, p75_moic: strat.p75, p90_moic: strat.p90, p95_moic: strat.p95 };
 
               return (
-                <g key={fund.id} onClick={() => onSelectFund(fund.id)} style={{ cursor: 'pointer' }}>
-                  {/* Hit area */}
-                  <rect
-                    x={LEFT_PAD + fi * colWidth}
-                    y={chartTop}
-                    width={colWidth}
-                    height={chartH}
-                    fill={isSelected ? 'rgba(255,255,255,0.03)' : 'transparent'}
-                    style={{ cursor: 'pointer' }}
-                  />
+                <g key={strat.id}>
+                  {si > 0 && <line x1={LEFT_PAD + si * colWidth} y1={chartTop} x2={LEFT_PAD + si * colWidth} y2={chartBottom} stroke="rgba(0,0,0,0.06)" strokeWidth="1" />}
 
-                  {/* Column separator */}
-                  {fi > 0 && (
-                    <line
-                      x1={LEFT_PAD + fi * colWidth} y1={chartTop}
-                      x2={LEFT_PAD + fi * colWidth} y2={chartBottom}
-                      stroke="rgba(255,255,255,0.06)" strokeWidth="1"
-                    />
-                  )}
-
-                  {/* Selection indicator */}
-                  {isSelected && (
-                    <rect
-                      x={LEFT_PAD + fi * colWidth}
-                      y={chartBottom}
-                      width={colWidth}
-                      height={3}
-                      fill={c.main}
-                    />
-                  )}
-
-                  {/* Fund name label at bottom */}
-                  <text
-                    x={cx}
-                    y={chartBottom + 20}
-                    fill={c.main}
-                    fontFamily={MONO}
-                    fontSize="11"
-                    fontWeight="700"
-                    textAnchor="middle"
-                    textDecoration={isSelected ? 'underline' : 'none'}
-                  >
-                    {fund.name}
+                  {/* Name label */}
+                  <text x={cx} y={chartBottom + 18} fill={c.main} fontFamily={MONO} fontSize="11" fontWeight="700" textAnchor="middle">
+                    {strat.name}
                   </text>
 
-                  {/* Whisker line P25 → P95 */}
-                  <line
-                    x1={cx} y1={toY(vals.p95_moic)}
-                    x2={cx} y2={toY(vals.p25_moic)}
-                    stroke={c.dim}
-                    strokeWidth="1.5"
-                  />
+                  {/* Whisker P25→P95 */}
+                  <line x1={cx} y1={toY(strat.p95)} x2={cx} y2={toY(strat.p25)} stroke={c.dim} strokeWidth="1.5" />
 
-                  {/* Box P75 → P90 */}
-                  <rect
-                    x={cx - 14}
-                    y={toY(vals.p90_moic)}
-                    width={28}
-                    height={Math.max(toY(vals.p75_moic) - toY(vals.p90_moic), 1)}
-                    fill={c.bg}
-                    stroke={c.dim}
-                    strokeWidth="1"
-                    rx="2"
-                  />
+                  {/* Box P75→P90 */}
+                  <rect x={cx - 14} y={toY(strat.p90)} width={28}
+                    height={Math.max(toY(strat.p75) - toY(strat.p90), 1)}
+                    fill={c.bg} stroke={c.dim} strokeWidth="1" rx="2" />
 
-                  {/* Dots */}
+                  {/* Dots with hover zones */}
                   {PERCENTILE_KEYS.map((p) => {
                     const val = vals[p.key];
                     const y = toY(val);
                     const isMedian = p.key === 'median_moic';
                     const dotColor = p.color || c.dim;
                     return (
-                      <g key={p.key}
-                        onMouseEnter={(e) => setTooltip({ fundId: fund.id, pKey: p.key, x: e.clientX, y: e.clientY })}
-                        onMouseMove={(e) => setTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
-                        onMouseLeave={() => setTooltip(null)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <circle
-                          cx={cx}
-                          cy={y}
-                          r={isMedian ? 6 : 4}
-                          fill={p.filled ? dotColor : '#000000'}
-                          stroke={dotColor}
-                          strokeWidth={p.filled ? 0 : 1.5}
-                        />
-                        {/* Larger invisible hit area */}
-                        <circle cx={cx} cy={y} r={12} fill="transparent" />
-                        {/* Value label to the right */}
-                        <text
-                          x={cx + (isMedian ? 12 : 10)}
-                          y={y + 3}
-                          fill={dotColor}
-                          fontFamily={MONO}
-                          fontSize="8"
-                          fontWeight={p.filled ? '700' : '400'}
-                          textAnchor="start"
-                        >
+                      <g key={p.key}>
+                        <circle cx={cx} cy={y} r={4}
+                          fill={p.filled ? dotColor : 'var(--paper)'} stroke={dotColor} strokeWidth={p.filled ? 0 : 1.5} />
+                        <text x={cx + 10} y={y + 3} fill={dotColor} fontFamily={MONO} fontSize="8"
+                          fontWeight={p.filled ? '700' : '400'} textAnchor="start">
                           {val.toFixed(2)}x
                         </text>
+                        {/* Invisible larger hit area for hover */}
+                        <circle cx={cx} cy={y} r={12} fill="transparent" style={{ cursor: 'pointer' }}
+                          onMouseEnter={(e) => handleDotEnter(e, strat, p.key)}
+                          onMouseMove={(e) => setTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                          onMouseLeave={() => setTooltip(null)}
+                        />
                       </g>
                     );
                   })}
                 </g>
               );
             })}
+
+            {/* Strategy Details — rendered in SVG for perfect alignment */}
+            {(() => {
+              const rows = [
+                { label: 'Fund Size', get: (s) => s.fundSize },
+                { label: 'Stages', get: (s) => s.stages },
+                { label: 'Entry Ownership', get: (s) => s.entryOwn },
+                { label: '# of Portcos', get: (s) => s.portfolioSize },
+              ];
+              const baseY = chartBottom + 32;
+              const lineH = 13;
+              return (
+                <g>
+                  {/* Section label aligned with strategy names */}
+                  <text x={LEFT_PAD - 6} y={chartBottom + 18} fill="#999" fontFamily={MONO} fontSize="8" textAnchor="end">MOIC Percentiles</text>
+                  {rows.map((row, ri) => (
+                    <g key={row.label}>
+                      <text x={LEFT_PAD - 6} y={baseY + ri * lineH} fill="#999" fontFamily={MONO} fontSize="8" textAnchor="end">{row.label}</text>
+                      {withResults.map((strat, si) => {
+                        const cx = LEFT_PAD + si * colWidth + colWidth / 2;
+                        return (
+                          <text key={strat.id} x={cx} y={baseY + ri * lineH} fill="#000" fontFamily={MONO} fontSize="8.5" fontWeight="400" textAnchor="middle">
+                            {row.get(strat)}
+                          </text>
+                        );
+                      })}
+                    </g>
+                  ))}
+                </g>
+              );
+            })()}
           </svg>
-        )}
-      </div>
 
-      {/* Hover tooltip with waterfall chart */}
-      {tooltip && (() => {
-        const res = fundResults[tooltip.fundId];
-        const allBreakdowns = res?.results?.portfolio_breakdown;
-        if (!allBreakdowns) return null;
-        // Map frontend percentile keys to backend keys
-        const pMap = { p25_moic: 'p25', median_moic: 'p50', p75_moic: 'p75', p90_moic: 'p90', p95_moic: 'p95' };
-        const bKey = pMap[tooltip.pKey] || 'p50';
-        const breakdown = allBreakdowns[bKey];
-        if (!breakdown || !breakdown.segments) return null;
-        const pLabel = bKey.toUpperCase();
-        const segments = breakdown.segments.filter((s) => s.value > 0 || s.type === 'failed');
-        if (segments.length === 0) return null;
-
-        const maxVal = Math.max(...segments.map((s) => s.value), 1);
-        const barW = 28;
-        const barGap = 6;
-        const chartW = segments.length * (barW + barGap) - barGap;
-        const chartH = 120;
-        const labelH = 48;
-        const topH = 18;
-        const svgW = chartW + 20;
-        const svgH = chartH + labelH + topH;
-
-        const segColor = (s) => s.type === 'acquired' ? '#4ade80' : s.type === 'failed' ? '#f87171' : '#ffffff';
-
-        return (
-          <div style={{
-            position: 'fixed',
-            left: tooltip.x + 20,
-            top: tooltip.y - svgH / 2,
-            zIndex: 1000,
-            background: '#000000',
-            border: '1px solid #ffffff',
-            padding: '10px 12px',
-            fontFamily: MONO,
-            fontSize: '9px',
-            pointerEvents: 'none',
-          }}>
-            <div style={{ color: '#ffffff', fontSize: '9px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {pLabel} PORTFOLIO BREAKDOWN
-            </div>
-            <svg width={svgW} height={svgH}>
-              {segments.map((seg, i) => {
-                const x = 10 + i * (barW + barGap);
-                const barH = maxVal > 0 ? (seg.value / maxVal) * chartH : 0;
-                const barY = topH + chartH - barH;
-                const col = segColor(seg);
-                return (
-                  <g key={i}>
-                    <rect x={x} y={barY} width={barW} height={Math.max(barH, 1)} fill={seg.type === 'failed' ? 'none' : col} stroke={col} strokeWidth="1" rx="1" opacity={seg.type === 'alive' ? 0.7 : 1} />
-                    <text x={x + barW / 2} y={barY - 3} fill={col} fontSize="7" fontFamily={MONO} textAnchor="middle" fontWeight="700">
-                      ${seg.value.toFixed(0)}M
-                    </text>
-                    <text x={x + barW / 2} y={topH + chartH + 12} fill={DIM} fontSize="7" fontFamily={MONO} textAnchor="middle">
-                      {seg.label.replace('Series ', 'S')}
-                    </text>
-                    <text x={x + barW / 2} y={topH + chartH + 24} fill={DIM} fontSize="6" fontFamily={MONO} textAnchor="middle">
-                      {seg.count.toFixed(1)} cos
-                    </text>
-                  </g>
-                );
-              })}
-              {/* Baseline */}
-              <line x1={6} y1={topH + chartH} x2={svgW - 6} y2={topH + chartH} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-            </svg>
-          </div>
-        );
-      })()}
-    </div>
-  );
-};
-
-const ReturnFrequency = ({ funds, fundResults, activeFundId }) => {
-  const res = fundResults[activeFundId];
-  const distribution = res?.moic_distribution;
-  const { bins, labels } = buildHistogram(distribution, 24);
-  const color = getFundColor(funds, activeFundId);
-  const activeFund = funds.find((f) => f.id === activeFundId);
-  const hasData = bins.length > 0;
-
-  return (
-    <div style={{ border: '1px solid #ffffff', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, padding: '4px 8px', background: '#000000', borderBottom: '1px solid #ffffff', borderRight: '1px solid #ffffff', fontFamily: MONO, fontSize: '10px', zIndex: 5, display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <span>RETURN DISTRIBUTION</span>
-        {activeFund && <span style={{ color: color.main }}>{activeFund.name}</span>}
-      </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'stretch', padding: '28px 16px 0 16px', gap: '1px' }}>
-        {hasData ? bins.map((height, index) => (
-          <div key={index} style={{ flex: 1, background: `linear-gradient(to top, ${color.main} 0%, ${color.bg} 100%)`, minHeight: '1px', position: 'relative', height: `${Math.max(height, 1)}%`, borderRadius: '1px 1px 0 0' }}>
-          </div>
-        )) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONO, fontSize: '11px', color: DIM, paddingBottom: '16px' }}>
-            CLICK A FUND TO VIEW
-          </div>
-        )}
-      </div>
-      {hasData && (
-        <div style={{ fontFamily: MONO, fontSize: '9px', display: 'flex', justifyContent: 'space-between', padding: '4px 16px 4px', borderTop: '1px solid rgba(255,255,255,0.2)', color: DIM }}>
-          {labels.map((l, i) => <span key={i} style={{ flex: 1, textAlign: 'center' }}>{l}</span>)}
-        </div>
+          {/* Tooltip */}
+          {tooltip && <BreakdownTooltip breakdown={tooltip.breakdown} label={tooltip.label} x={tooltip.x} y={tooltip.y} />}
+        </>
       )}
     </div>
   );
 };
 
-const KeyMetrics = ({ funds, fundResults }) => {
-  const allResults = funds
-    .filter((f) => fundResults[f.id])
-    .map((f, i) => {
-      const r = fundResults[f.id];
+// ─── Key Metrics Comparison Table ─────────────────────────────────
+const ComparisonMetrics = ({ strategies }) => {
+  const withResults = strategies
+    .map((s, i) => {
+      if (!s.results) return null;
+      const r = s.results;
       const p95 = computeP95(r.moic_distribution);
       const p95_tvpi = computeP95(r.tvpi_distribution);
-      return { name: f.name, results: { ...r.results, p95_moic: p95 != null ? p95 : r.results.p90_moic, p95_tvpi: p95_tvpi != null ? p95_tvpi : r.results.p90_tvpi }, color: FUND_COLORS[funds.indexOf(f) % FUND_COLORS.length] };
-    });
+      const cfg = s.config || {};
+      const committed = cfg.fund_size_m || 0;
+      const feePct = (cfg.management_fee_pct ?? 2) / 100;
+      const fees = committed * feePct * 10;
+      const recycled = committed * ((cfg.recycled_capital_pct ?? 20) / 100);
+      const ci = s._colorIndex != null ? s._colorIndex : i;
+      return {
+        name: s.name,
+        results: {
+          ...r.results,
+          p95_moic: p95 != null ? p95 : r.results.p90_moic,
+          p95_tvpi: p95_tvpi != null ? p95_tvpi : r.results.p90_tvpi,
+          total_fees: fees,
+          recycled_capital: recycled,
+        },
+        color: STRATEGY_COLORS[ci % STRATEGY_COLORS.length],
+      };
+    })
+    .filter(Boolean);
 
-  const fmt = (v, decimals = 2) => v != null ? v.toFixed(decimals) : '-';
+  if (withResults.length === 0) return null;
+
+  const fmt = (v, decimals = 2) => v != null ? v.toFixed(decimals) : '—';
+
+  const rows = [
+    { key: '_section_moic', section: 'MOIC' },
+    { key: 'p95_moic', label: 'P95', suffix: 'x', decimals: 1 },
+    { key: 'p90_moic', label: 'P90', suffix: 'x', decimals: 1 },
+    { key: 'p75_moic', label: 'P75', suffix: 'x', decimals: 1 },
+    { key: 'median_moic', label: 'P50', suffix: 'x', decimals: 1 },
+    { key: 'p25_moic', label: 'P25', suffix: 'x', decimals: 1 },
+    { key: '_section_capital', section: 'Capital' },
+    { key: 'committed_capital', label: 'Committed Capital', suffix: 'M', prefix: '$', decimals: 0 },
+    { key: 'total_fees', label: 'Fees', suffix: 'M', prefix: '$', decimals: 0 },
+    { key: 'recycled_capital', label: 'Recycled Capital', suffix: 'M', prefix: '$', decimals: 0 },
+    { key: 'avg_primary_invested', label: 'Primary Capital', suffix: 'M', prefix: '$', decimals: 0 },
+    { key: 'avg_follow_on_invested', label: 'Follow-On Capital', suffix: 'M', prefix: '$', decimals: 0 },
+    { key: '_section_portfolio', section: 'Portfolio' },
+    { key: 'avg_total_companies', label: 'Portfolio Size', suffix: '', decimals: 0 },
+    { key: 'avg_entry_ownership', label: 'Avg Ownership at Entry', suffix: '%', decimals: 1 },
+  ];
 
   return (
-    <div style={{ border: '1px solid #ffffff', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, padding: '4px 8px', background: '#000000', borderBottom: '1px solid #ffffff', borderRight: '1px solid #ffffff', fontFamily: MONO, fontSize: '10px', zIndex: 5 }}>
-        KEY METRICS
-      </div>
-      <div style={{ padding: '28px 16px 16px', overflowY: 'auto', flex: 1 }}>
-        {allResults.length === 0 ? (
-          <div style={{ fontFamily: MONO, fontSize: '12px', color: DIM, textAlign: 'center', paddingTop: '24px' }}>
-            NO DATA
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: '11px' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #ffffff', color: DIM, fontWeight: 'normal' }}>METRIC</th>
-                {allResults.map((sim, i) => (
-                  <th key={i} style={{ textAlign: 'right', padding: '6px 8px', borderBottom: `2px solid ${sim.color.main}`, color: sim.color.main, fontWeight: 700, fontSize: '10px' }}>
-                    {sim.name}
-                  </th>
+    <div style={{ padding: '0 24px 16px', overflowY: 'auto', flex: 1 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: MONO, fontSize: '11px' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '8px 0', borderBottom: '1px solid var(--ink)', fontSize: '10px', fontWeight: 600, color: '#666' }}>METRIC</th>
+            {withResults.map((sim, i) => (
+              <th key={i} style={{ textAlign: 'right', padding: '8px 0', borderBottom: `2px solid ${sim.color.main}`, color: sim.color.main, fontWeight: 700, fontSize: '10px' }}>
+                {sim.name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            row.section ? (
+              <tr key={row.key}>
+                <td colSpan={1 + withResults.length} style={{ padding: '10px 0 4px', fontSize: '10px', fontWeight: 600, color: '#666', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid var(--ink)' }}>
+                  {row.section}
+                </td>
+              </tr>
+            ) : (
+              <tr key={row.key}>
+                <td style={{ padding: '4px 0', borderBottom: '1px solid var(--trace)', color: 'var(--ink)' }}>{row.label}</td>
+                {withResults.map((sim, si) => (
+                  <td key={si} style={{ padding: '4px 0', borderBottom: '1px solid var(--trace)', textAlign: 'right', color: sim.color.main }}>
+                    {row.prefix || ''}{fmt(sim.results[row.key], row.decimals != null ? row.decimals : 2)}{row.suffix}
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {[
-                { key: 'p95_tvpi', label: 'P95 TVPI', suffix: 'x' },
-                { key: 'p90_tvpi', label: 'P90 TVPI', suffix: 'x' },
-                { key: 'p75_tvpi', label: 'P75 TVPI', suffix: 'x' },
-                { key: 'median_tvpi', label: 'P50 TVPI', suffix: 'x' },
-                { key: 'p25_tvpi', label: 'P25 TVPI', suffix: 'x' },
-                { key: '_separator_1', label: '', separator: true },
-                { key: 'p95_moic', label: 'P95 MOIC', suffix: 'x' },
-                { key: 'p90_moic', label: 'P90 MOIC', suffix: 'x' },
-                { key: 'p75_moic', label: 'P75 MOIC', suffix: 'x' },
-                { key: 'median_moic', label: 'P50 MOIC', suffix: 'x' },
-                { key: 'p25_moic', label: 'P25 MOIC', suffix: 'x' },
-                { key: '_separator_2', label: '', separator: true },
-                { key: 'committed_capital', label: 'COMMITTED CAPITAL', suffix: 'M', prefix: '$', decimals: 0 },
-                { key: 'fund_size', label: 'INVESTED CAPITAL', suffix: 'M', prefix: '$', decimals: 0 },
-                { key: 'avg_primary_invested', label: 'PRIMARY INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
-                { key: 'avg_follow_on_invested', label: 'PRO RATA INVESTED', suffix: 'M', prefix: '$', decimals: 1 },
-                { key: 'avg_total_companies', label: 'AVG PORTFOLIO SIZE', suffix: '', decimals: 1 },
-              ].map((row, ri, arr) => (
-                row.separator ? (
-                  <tr key={row.key}>
-                    <td colSpan={1 + allResults.length} style={{ padding: '2px 0', borderBottom: 'none' }}>
-                      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.15)', margin: '2px 0' }} />
-                    </td>
-                  </tr>
-                ) : (
-                  <tr key={row.key}>
-                    <td style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, color: '#ffffff' }}>{row.label}</td>
-                    {allResults.map((sim, si) => (
-                      <td key={si} style={{ padding: '5px 8px', borderBottom: ri === arr.length - 1 ? 'none' : BORDER_DIM, textAlign: 'right', color: sim.color.main }}>
-                        {row.prefix || ''}{fmt(sim.results[row.key], row.decimals || 2)}{row.suffix}
-                      </td>
-                    ))}
-                  </tr>
-                )
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            )
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };
 
-const ErrorBanner = ({ error, onDismiss }) => {
-  if (!error) return null;
-  return (
-    <div style={{ padding: '8px 16px', background: 'rgba(255,50,50,0.15)', borderBottom: '1px solid rgba(255,50,50,0.4)', display: 'flex', alignItems: 'center', gap: '12px', fontFamily: MONO, fontSize: '11px', flexShrink: 0 }}>
-      <span style={{ color: '#ff6666' }}>ERROR</span>
-      <span style={{ color: DIM, flex: 1 }}>{error}</span>
-      <button onClick={onDismiss} style={{ background: 'transparent', border: 'none', color: DIM, cursor: 'pointer', fontFamily: MONO, fontSize: '14px' }}>×</button>
-    </div>
-  );
-};
-
+// ─── Main App ─────────────────────────────────────────────────────
 const App = () => {
-  const [funds, setFunds] = useState(() => {
-    const stored = localStorage.getItem('monaco_funds');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          nextFundId = Math.max(...parsed.map(f => f.id)) + 1;
-          return parsed.map(f => ({ ...f, config: migrateConfig(f.config) }));
-        }
-      } catch (e) {}
-    }
-    return [{ id: 1, name: 'Fund A', config: { ...DEFAULT_CONFIG } }];
-  });
-  const [activeFundId, setActiveFundId] = useState(() => {
-    const stored = localStorage.getItem('monaco_funds');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].id;
-      } catch (e) {}
-    }
-    return 1;
-  });
+  const [activeTab, setActiveTab] = useState('entry'); // 'entry' | 'comparison'
+
+  // ── Working config (the one being edited) ──
+  const [config, setConfig] = useState(() => deepCloneConfig(DEFAULT_CONFIG));
+  const [strategyName, setStrategyName] = useState('NEW STRATEGY');
+
+  // ── Global State ──
   const [marketScenario, setMarketScenario] = useState(() => {
-    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.marketScenario || 'MARKET'; } catch(e) { return 'MARKET'; }
-  });
-  const [numPeriods, setNumPeriods] = useState(() => {
-    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numPeriods || 8; } catch(e) { return 8; }
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.marketScenario || 'MARKET'; } catch (e) { return 'MARKET'; }
   });
   const [numIterations, setNumIterations] = useState(() => {
-    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 5000; } catch(e) { return 5000; }
+    try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 5000; } catch (e) { return 5000; }
   });
-  const [fundResults, setFundResults] = useState({});
+
+  // ── Simulation state ──
+  const [currentResult, setCurrentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [resultsStale, setResultsStale] = useState(false);
 
+  // ── Saved Strategies (with results) ──
+  const [savedStrategies, setSavedStrategies] = useState(loadSavedStrategies);
+  const [activeStrategyId, setActiveStrategyId] = useState(null);
+  const [comparisonSelected, setComparisonSelected] = useState(null); // null = all selected
+
+  // ── Inject Styles ──
   useEffect(() => {
-    const link = document.createElement('link');
-    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap';
-    link.rel = 'stylesheet';
-    document.head.appendChild(link);
+    const linkFont = document.createElement('link');
+    linkFont.href = 'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap';
+    linkFont.rel = 'stylesheet';
+    document.head.appendChild(linkFont);
 
     const style = document.createElement('style');
     style.textContent = `
+      :root { --ink: #000000; --paper: #ffffff; --trace: rgba(0,0,0,0.1); --grid: rgba(0,0,0,0.15); --hairline: 1px; }
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body, #root {
-        height: 100%;
-        overflow: hidden;
+      html, body, #root { height: 100%; overflow: hidden; }
+      body { background-color: var(--paper); color: var(--ink); font-family: 'Barlow Condensed', sans-serif; font-size: 14px; letter-spacing: 0.02em; -webkit-font-smoothing: antialiased; }
+      #root { display: flex; flex-direction: column; }
+
+      h1, h2, h3, .label, .input-label { text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; margin: 0; }
+      .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.9em; }
+
+      .panel { border-right: var(--hairline) solid var(--ink); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+      .panel:last-child { border-right: none; }
+      .panel-header { background-color: var(--ink); color: var(--paper); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+      .panel-header h2 { font-size: 15px; margin: 0; }
+
+      .panel-content {
+        padding: 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 24px;
+        background-image: linear-gradient(var(--trace) 1px, transparent 1px), linear-gradient(90deg, var(--trace) 1px, transparent 1px);
+        background-size: 40px 40px; background-position: -1px -1px;
       }
-      body {
-        background-color: #000000;
-        color: #ffffff;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 12px;
-        -webkit-font-smoothing: antialiased;
-      }
-      #root {
-        display: flex;
-        flex-direction: column;
-      }
-      input[type=range]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        height: 16px; width: 8px;
-        background: #ffffff; cursor: pointer;
-        border: 1px solid #000000; margin-top: -6px; border-radius: 0;
-      }
-      input[type=range]::-moz-range-thumb {
-        height: 16px; width: 8px;
-        background: #ffffff; cursor: pointer;
-        border: 1px solid #000000; border-radius: 0;
-      }
-      input[type="text"]:focus, input[type="number"]:focus { border-color: #ffffff; }
-      @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-      aside::-webkit-scrollbar { width: 4px; }
-      aside::-webkit-scrollbar-track { background: transparent; }
-      aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
-      aside::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+      .input-group { display: flex; flex-direction: column; gap: 8px; }
+      .input-label { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; }
+      .input-field { background: var(--paper); border: var(--hairline) solid var(--ink); padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none; transition: all 0.2s; border-radius: 0; }
+      .input-field:focus { box-shadow: 4px 4px 0 var(--ink); transform: translate(-1px, -1px); }
+      .input-field.compact { padding: 4px 6px; font-size: 12px; }
+
+      .slider-container { display: flex; flex-direction: column; gap: 10px; }
+      .slider-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+      .range-wrapper { position: relative; height: 20px; display: flex; align-items: center; }
+      input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+      input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border: 2px solid var(--ink); background: var(--paper); border-radius: 50%; cursor: pointer; margin-top: -7px; position: relative; z-index: 2; }
+      input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; background: transparent; border-bottom: 1px dashed var(--ink); }
+      input[type=range]::-moz-range-thumb { height: 16px; width: 16px; border: 2px solid var(--ink); background: var(--paper); border-radius: 50%; cursor: pointer; }
+
+      .strategy-card { border: var(--hairline) solid var(--ink); background: var(--paper); padding: 16px; cursor: pointer; transition: box-shadow 0.15s, border-width 0.15s; }
+      .strategy-card:hover { box-shadow: 3px 3px 0 var(--ink); }
+      .strategy-card.active { box-shadow: 6px 6px 0 var(--ink); border-width: 2px; }
+      .strategy-card-header { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid var(--trace); padding-bottom: 8px; }
+      .metric-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+      .card-delete { font-size: 20px; line-height: 1; opacity: 0.4; cursor: pointer; padding: 2px 6px; }
+      .card-delete:hover { opacity: 1; }
+
+      .section-divider { height: 1px; background: var(--ink); margin: 4px 0; }
+
+      .btn { background: var(--ink); color: var(--paper); border: none; padding: 12px 24px; font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; font-weight: 600; letter-spacing: 0.1em; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.15s; }
+      .btn:hover { opacity: 0.85; }
+      .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+      .btn.secondary:hover { background: rgba(0,0,0,0.04); }
+
+      .stats-overlay { border-top: 1px solid var(--ink); display: grid; flex-shrink: 0; }
+      .stat-box { border-right: 1px solid var(--trace); padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; }
+      .stat-box:last-child { border-right: none; }
+      .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 500; }
+      .stat-label { font-size: 10px; color: #666; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+      .scenario-btn-group { display: flex; gap: 0; }
+      .scenario-btn { flex: 1; padding: 8px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; border: 1px solid var(--ink); transition: all 0.15s; background: transparent; color: var(--ink); }
+      .scenario-btn:not(:last-child) { border-right: none; }
+      .scenario-btn.active { background: var(--ink); color: var(--paper); }
+
+      .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: 'Barlow Condensed', sans-serif; text-transform: uppercase; letter-spacing: 0.03em; color: #666; }
+      .checkbox-row input[type=checkbox] { accent-color: var(--ink); width: 14px; height: 14px; cursor: pointer; }
+
+      .deployed-calc { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #666; padding: 8px 0; border-top: 1px dashed var(--trace); }
+      .deployed-calc strong { color: var(--ink); }
+
+      .error-bar { padding: 10px 20px; background: #fef2f2; border-bottom: 1px solid #fca5a5; display: flex; align-items: center; gap: 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; flex-shrink: 0; }
+
+      .top-tabs { display: flex; border-bottom: 2px solid var(--ink); flex-shrink: 0; }
+      .top-tab { padding: 12px 32px; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; border: none; background: transparent; color: #999; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+      .top-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+      .top-tab:hover { color: var(--ink); }
+
+      .panel-content::-webkit-scrollbar { width: 4px; }
+      .panel-content::-webkit-scrollbar-track { background: transparent; }
+      .panel-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
+
+      @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     `;
     document.head.appendChild(style);
+    return () => { document.head.removeChild(linkFont); document.head.removeChild(style); };
+  }, []);
 
-    return () => {
-      document.head.removeChild(link);
-      document.head.removeChild(style);
+  // ── Persist ──
+  useEffect(() => { localStorage.setItem('monaco_globals', JSON.stringify({ marketScenario, numIterations })); }, [marketScenario, numIterations]);
+  useEffect(() => { persistStrategies(savedStrategies); }, [savedStrategies]);
+
+  // ── Config helpers ──
+  const setField = useCallback((field, value) => {
+    setConfig((prev) => ({ ...prev, [field]: value }));
+    if (currentResult) setResultsStale(true);
+  }, [currentResult]);
+
+  // ── Load a saved strategy into the editor ──
+  const loadStrategy = useCallback((strategy) => {
+    setActiveStrategyId(strategy.id);
+    setConfig(deepCloneConfig(strategy.config));
+    setStrategyName(strategy.name);
+    setCurrentResult(strategy.results || null);
+    setResultsStale(strategy.stale || false);
+  }, []);
+
+  // ── Auto-save: sync config/name/results/stale to active strategy ──
+  useEffect(() => {
+    if (activeStrategyId == null) return;
+    setSavedStrategies((prev) => prev.map((s) =>
+      s.id === activeStrategyId
+        ? { ...s, name: strategyName.trim().toUpperCase() || s.name, config: deepCloneConfig(config), results: currentResult, stale: resultsStale }
+        : s
+    ));
+  }, [config, strategyName, currentResult, activeStrategyId, resultsStale]);
+
+  // ── Create new strategy (clones current config) ──
+  const createNewStrategy = useCallback(() => {
+    if (savedStrategies.length >= MAX_STRATEGIES) return;
+    const code = strategyCode(savedStrategies.length);
+    const newStrategy = {
+      id: nextStrategyId++,
+      name: `STRATEGY ${code}`,
+      code,
+      config: deepCloneConfig(config),
+      results: null,
+      stale: false,
     };
-  }, []);
+    setSavedStrategies((prev) => [...prev, newStrategy]);
+    setActiveStrategyId(newStrategy.id);
+    setStrategyName(newStrategy.name);
+    setCurrentResult(null);
+    setResultsStale(false);
+  }, [config, savedStrategies]);
 
-  useEffect(() => {
-    localStorage.setItem('monaco_funds', JSON.stringify(funds));
-  }, [funds]);
-
-  useEffect(() => {
-    localStorage.setItem('monaco_globals', JSON.stringify({ marketScenario, numPeriods, numIterations }));
-  }, [marketScenario, numPeriods, numIterations]);
-
-  const addFund = useCallback(() => {
-    if (funds.length >= 4) return;
-    const usedNames = new Set(funds.map((f) => f.name));
-    const name = FUND_NAMES.find((n) => !usedNames.has(n)) || `Fund ${nextFundId}`;
-    const source = funds.find((f) => f.id === activeFundId) || funds[funds.length - 1];
-    const clonedAllocations = {};
-    for (const [k, v] of Object.entries(source.config.stage_allocations || {})) {
-      clonedAllocations[k] = { ...v };
+  const deleteStrategy = useCallback((id) => {
+    setSavedStrategies((prev) => prev.filter((s) => s.id !== id));
+    if (activeStrategyId === id) {
+      setActiveStrategyId(null);
+      setCurrentResult(null);
+      setResultsStale(false);
     }
-    const newFund = { id: nextFundId++, name, config: { ...source.config, stage_allocations: clonedAllocations } };
-    setFunds((prev) => [...prev, newFund]);
-    setActiveFundId(newFund.id);
-  }, [funds, activeFundId]);
+  }, [activeStrategyId]);
 
-  const removeFund = useCallback((id) => {
-    setFunds((prev) => {
-      const next = prev.filter((f) => f.id !== id);
-      if (next.length === 0) return prev;
-      return next;
-    });
-    setFundResults((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    if (activeFundId === id) {
-      setActiveFundId((prev) => {
-        const remaining = funds.filter((f) => f.id !== id);
-        return remaining.length > 0 ? remaining[0].id : prev;
-      });
-    }
-  }, [activeFundId, funds]);
-
-  const updateConfig = useCallback((fundId, newConfig) => {
-    setFunds((prev) => prev.map((f) => f.id === fundId ? { ...f, config: newConfig } : f));
-  }, []);
-
+  // ── Run Simulation (single strategy) ──
   const runSimulation = useCallback(async () => {
+    const total = ENTRY_STAGES.reduce((sum, s) => sum + (config.stage_allocations?.[s]?.pct || 0), 0);
+    if (total !== 100) return;
     setLoading(true);
     setError(null);
     try {
-      const storedRates = localStorage.getItem('monaco_custom_graduation_rates');
-      const customRates = storedRates ? JSON.parse(storedRates) : null;
-      const storedVals = localStorage.getItem('monaco_custom_stage_valuations');
-      const customValuations = storedVals ? JSON.parse(storedVals) : null;
-      const simulations = funds.map((f) => {
-        const { stage_allocations, ...rest } = f.config;
-        const valuations = getStageValuations();
-        const checkSizes = {};
-        const ownershipPcts = {};
-        const allocationPcts = {};
-        for (const [stage, alloc] of Object.entries(stage_allocations || {})) {
-          if (alloc.pct > 0) {
-            checkSizes[stage] = alloc.check_size;
-            ownershipPcts[stage] = alloc.check_size / (valuations[stage] || 1);
-            allocationPcts[stage] = alloc.pct;
-          }
-        }
-        const cfg = {
-          ...rest,
-          market_scenario: marketScenario,
-          num_periods: 8,
-          num_iterations: numIterations,
-          check_sizes_at_entry: checkSizes,
-          ownership_percentages_at_entry: ownershipPcts,
-          stage_allocation_pcts: allocationPcts,
-        };
-        if (customRates && customRates[marketScenario]) {
-          cfg.graduation_rates = customRates[marketScenario];
-        }
-        if (customValuations) {
-          cfg.stage_valuations = customValuations;
-        }
-        return { name: f.name, config: cfg };
-      });
+      const cfg = buildSimPayload(config, marketScenario, numIterations);
       const response = await fetch(`${API_BASE}/api/simulate/multiple`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simulations }),
+        body: JSON.stringify({ simulations: [{ name: strategyName, config: cfg }] }),
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
         throw new Error(errData?.detail || `Server error ${response.status}`);
       }
       const data = await response.json();
-      const resultsMap = {};
-      data.simulations.forEach((sim, i) => {
-        resultsMap[funds[i].id] = sim;
-      });
-      setFundResults(resultsMap);
+      const result = data.simulations[0];
+      setCurrentResult(result);
+      setResultsStale(false);
     } catch (err) {
       setError(err.message || 'Failed to run simulation');
     } finally {
       setLoading(false);
     }
-  }, [funds, marketScenario, numPeriods, numIterations]);
+  }, [config, marketScenario, numIterations, strategyName]);
 
+  // ── Run All Simulations (comparison page) ──
+  const COMPARISON_ITERATIONS = 7000;
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+
+  const runAllSimulations = useCallback(async () => {
+    const strategiesToRun = savedStrategies.filter((s) => s.config);
+    if (strategiesToRun.length === 0) return;
+    setComparisonLoading(true);
+    setError(null);
+    try {
+      const sims = strategiesToRun.map((s) => ({
+        name: s.name,
+        config: buildSimPayload(s.config, marketScenario, COMPARISON_ITERATIONS),
+      }));
+      const response = await fetch(`${API_BASE}/api/simulate/multiple`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ simulations: sims }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.detail || `Server error ${response.status}`);
+      }
+      const data = await response.json();
+      setSavedStrategies((prev) => prev.map((s) => {
+        const idx = strategiesToRun.findIndex((st) => st.id === s.id);
+        if (idx === -1) return s;
+        return { ...s, results: data.simulations[idx], stale: false };
+      }));
+      // Update current result if active strategy was re-run
+      if (activeStrategyId != null) {
+        const idx = strategiesToRun.findIndex((st) => st.id === activeStrategyId);
+        if (idx !== -1) {
+          setCurrentResult(data.simulations[idx]);
+          setResultsStale(false);
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to run simulations');
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, [savedStrategies, marketScenario, activeStrategyId]);
+
+  // ── Deployed capital calc ──
+  const fs = config.fund_size_m || 0;
+  const fees = fs * ((config.management_fee_pct ?? 2) / 100) * 10;
+  const recycled = fs * ((config.recycled_capital_pct ?? 20) / 100);
+  const deployed = fs - fees + recycled;
+  const allocationTotal = ENTRY_STAGES.reduce((sum, s) => sum + (config.stage_allocations?.[s]?.pct || 0), 0);
+  const allocationValid = allocationTotal === 100;
+
+  // ── Stats for current result ──
+  const r = currentResult?.results;
+  const statsItems = [
+    { value: r ? `${r.median_tvpi?.toFixed(2) || '—'}x` : '—', label: 'TVPI (Median)' },
+    { value: r ? `$${r.fund_size?.toFixed(0) || '—'}M` : '—', label: 'Fund Size' },
+    { value: r ? `${r.median_moic?.toFixed(2) || '—'}x` : '—', label: 'MOIC (Median)' },
+    { value: r ? `$${(r.fund_size - fees)?.toFixed(0) || '—'}M` : '—', label: 'Invested Capital' },
+    { value: r ? `${r.avg_total_companies?.toFixed(0) || '—'}` : '—', label: 'Portfolio Size' },
+    { value: r ? `${r.avg_entry_ownership?.toFixed(1) || '—'}%` : '—', label: 'Avg Entry Own.' },
+  ];
+
+  const activeColor = activeStrategyId != null
+    ? STRATEGY_COLORS[savedStrategies.findIndex((s) => s.id === activeStrategyId) % STRATEGY_COLORS.length]
+    : STRATEGY_COLORS[0];
+
+  // ─── Render ─────────────────────────────────────────────────────
   return (
-    <div style={customStyles.root}>
-      <Header />
-
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <Sidebar
-          funds={funds}
-          activeFundId={activeFundId}
-          onSelectFund={setActiveFundId}
-          onAddFund={addFund}
-          onRemoveFund={removeFund}
-          onUpdateConfig={updateConfig}
-          marketScenario={marketScenario}
-          onMarketScenarioChange={setMarketScenario}
-          numPeriods={numPeriods}
-          onNumPeriodsChange={setNumPeriods}
-          numIterations={numIterations}
-          onNumIterationsChange={setNumIterations}
-        />
-
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-          <Toolbar
-            onRunSimulation={runSimulation}
-            loading={loading}
-            fundCount={funds.length}
-          />
-
-          <ErrorBanner error={error} onDismiss={() => setError(null)} />
-
-          <div style={{ flex: 1, padding: '16px', display: 'grid', gridTemplateColumns: '2fr 1fr', gridTemplateRows: '1fr 1fr', gap: '16px', overflow: 'hidden', minHeight: 0 }}>
-            <DotPlot funds={funds} fundResults={fundResults} activeFundId={activeFundId} onSelectFund={setActiveFundId} />
-            <ReturnFrequency funds={funds} fundResults={fundResults} activeFundId={activeFundId} />
-            <KeyMetrics funds={funds} fundResults={fundResults} />
-          </div>
-        </main>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top Tabs */}
+      <div className="top-tabs">
+        <button className={`top-tab ${activeTab === 'entry' ? 'active' : ''}`} onClick={() => {
+          setActiveTab('entry');
+          if (activeStrategyId == null && savedStrategies.length > 0) loadStrategy(savedStrategies[0]);
+        }}>
+          Strategy Entry
+        </button>
+        <button className={`top-tab ${activeTab === 'comparison' ? 'active' : ''}`} onClick={() => setActiveTab('comparison')}>
+          Strategy Comparison
+        </button>
+        <div style={{ flex: 1 }} />
+        <a href="#/markets" style={{
+          fontFamily: MONO, fontSize: '11px', color: '#999', textDecoration: 'none',
+          padding: '8px 20px', letterSpacing: '0.03em', alignSelf: 'center',
+          transition: 'color 0.15s',
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#999'; }}
+        >View / Edit Market Data</a>
       </div>
+
+      {error && (
+        <div className="error-bar">
+          <span style={{ color: '#dc2626', fontWeight: 600 }}>ERROR</span>
+          <span style={{ flex: 1, color: '#666' }}>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#999' }}>×</button>
+        </div>
+      )}
+
+      {/* ═══════════ STRATEGY ENTRY TAB ═══════════ */}
+      {activeTab === 'entry' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 320px 1fr', flex: 1, overflow: 'hidden' }}>
+          {/* Panel 1: Strategy List */}
+          <aside className="panel">
+            <div className="panel-header">
+              <h2>1. Strategy</h2>
+              <span className="mono">SELECT</span>
+            </div>
+            <div className="panel-content">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="input-label" style={{ fontSize: '12px', color: '#666' }}>SAVED MODELS</div>
+
+                {savedStrategies.length === 0 && (
+                  <div style={{ fontFamily: MONO, fontSize: '11px', color: '#999', padding: '8px 0' }}>
+                    No strategies yet — click below to create one
+                  </div>
+                )}
+
+                {savedStrategies.map((strat) => {
+                  const summary = summarizeConfig(activeStrategyId === strat.id ? config : strat.config);
+                  return (
+                    <StrategyCard
+                      key={strat.id}
+                      name={activeStrategyId === strat.id ? strategyName : strat.name}
+                      code={strat.code}
+                      fundSize={summary.fundSize}
+                      checkSize={summary.checkSize}
+                      reserves={summary.reserves}
+                      stages={summary.stages}
+                      isActive={activeStrategyId === strat.id}
+                      hasResults={!!strat.results}
+                      isStale={activeStrategyId === strat.id ? resultsStale : (strat.stale || false)}
+                      onClick={() => { if (activeStrategyId !== strat.id) loadStrategy(strat); }}
+                      onDelete={() => deleteStrategy(strat.id)}
+                      onNameChange={activeStrategyId === strat.id ? (v) => setStrategyName(v) : undefined}
+                    />
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: 'auto' }}>
+                <button className="btn" onClick={createNewStrategy}
+                  disabled={savedStrategies.length >= MAX_STRATEGIES}
+                  style={savedStrategies.length >= MAX_STRATEGIES ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
+                >
+                  {savedStrategies.length >= MAX_STRATEGIES ? `MAX ${MAX_STRATEGIES} STRATEGIES` : '+ New Strategy'}
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          {/* Panel 2: Variables */}
+          <aside className="panel" style={activeStrategyId == null ? { opacity: 0.35, pointerEvents: 'none' } : {}}>
+            <div className="panel-header">
+              <h2>2. Variables</h2>
+              <span className="mono">{activeStrategyId == null ? 'SELECT A STRATEGY' : 'INPUT'}</span>
+            </div>
+            <div className="panel-content">
+              <SliderInput label="FUND SIZE" value={config.fund_size_m} onChange={(v) => setField('fund_size_m', v)} min={0} max={600} step={5} unit="M" />
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <NumberInput label="MGMT FEE (% / YR)" value={config.management_fee_pct} onChange={(v) => setField('management_fee_pct', v)} min={0} max={10} step={0.5} />
+                <NumberInput label="FEE DURATION (YRS)" value={10} onChange={() => {}} disabled />
+              </div>
+
+              <SliderInput label="RECYCLED CAPITAL" value={config.recycled_capital_pct} onChange={(v) => setField('recycled_capital_pct', v)} min={0} max={40} step={5} unit="%" />
+
+              <div className="deployed-calc">
+                <span style={{ color: 'var(--ink)' }}>${Math.round(fs)}M</span> − <span style={{ color: '#dc2626' }}>${Math.round(fees)}M fees</span> + <span style={{ color: '#16a34a' }}>${Math.round(recycled)}M recycled</span> = <strong>${Math.round(deployed)}M deployed</strong>
+              </div>
+
+              <div className="section-divider" style={{ marginTop: '-12px' }} />
+              <div className="input-label" style={{ marginTop: '-12px', marginBottom: '-8px' }}>PORTFOLIO CONSTRUCTION</div>
+
+              <SliderInput label="FOLLOW-ON RESERVE" value={config.dry_powder_reserve_for_pro_rata} onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)} min={0} max={70} step={5} unit="%" />
+
+              <div className="checkbox-row">
+                <input type="checkbox" id="reinvest" checked={config.reinvest_unused_reserve !== false} onChange={(e) => setField('reinvest_unused_reserve', e.target.checked)} />
+                <label htmlFor="reinvest" style={{ cursor: 'pointer' }}>Re-invest unused reserve</label>
+              </div>
+
+              <NumberInput label="PRO-RATA MAX VALUATION ($M)" value={config.pro_rata_max_valuation} onChange={(v) => setField('pro_rata_max_valuation', v)} min={0} max={10000} step={10} />
+
+              <StageAllocationTable stageAllocations={config.stage_allocations} onStageAllocationsChange={(v) => setField('stage_allocations', v)} />
+
+            </div>
+          </aside>
+
+          {/* Panel 3: Single Strategy Results */}
+          <main className="panel" style={{ overflow: 'hidden' }}>
+            <div className="panel-header" style={{ background: 'var(--paper)', color: 'var(--ink)', borderBottom: '1px solid var(--ink)', gap: '10px' }}>
+              <h2 style={{ flex: 1 }}>Simulated Performance Distribution</h2>
+              <span style={{ fontFamily: MONO, fontSize: '10px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Market Conditions</span>
+              <select
+                value={marketScenario}
+                onChange={(e) => setMarketScenario(e.target.value)}
+                style={{ padding: '4px 8px', fontFamily: MONO, fontSize: '11px', border: '1px solid var(--ink)', background: 'var(--paper)', color: 'var(--ink)', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="BELOW_MARKET">Bear</option>
+                <option value="MARKET">Average</option>
+                <option value="ABOVE_MARKET">Bull</option>
+              </select>
+              <IterationsInput value={numIterations} onChange={setNumIterations} />
+              <button
+                className="btn"
+                onClick={runSimulation}
+                disabled={loading || !allocationValid}
+                style={{ width: 'auto', padding: '6px 20px', fontSize: '12px', ...(!allocationValid ? { opacity: 0.35 } : {}) }}
+              >
+                {loading ? 'RUNNING...' : !allocationValid ? `ALLOCATION ≠ 100% (${allocationTotal}%)` : 'RUN SIMULATION'}
+              </button>
+            </div>
+
+            {loading && (
+              <div style={{ padding: '8px 20px', fontFamily: MONO, fontSize: '11px', color: '#999', animation: 'pulse 1.5s infinite', borderBottom: '1px solid var(--trace)' }}>
+                COMPUTING...
+              </div>
+            )}
+
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+              <Histogram result={currentResult} color={activeColor} />
+              <div className="stats-overlay" style={{ gridTemplateColumns: `repeat(${statsItems.length}, 1fr)`, opacity: resultsStale ? 0.3 : 1, transition: 'opacity 0.2s' }}>
+                {statsItems.map((s, i) => <StatBox key={i} value={s.value} label={s.label} />)}
+              </div>
+
+              {/* Stale results overlay */}
+              {resultsStale && (
+                <div style={{
+                  position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.75)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  zIndex: 10, pointerEvents: 'none',
+                }}>
+                  <div style={{
+                    fontFamily: MONO, fontSize: '12px', color: '#999',
+                    textAlign: 'center', lineHeight: '1.8', textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}>
+                    Out of date<br />
+                    <span style={{ fontSize: '10px', color: '#bbb' }}>Re-run simulation for latest performance details</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+      )}
+
+      {/* ═══════════ STRATEGY COMPARISON TAB ═══════════ */}
+      {activeTab === 'comparison' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {savedStrategies.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
+              <span style={{ fontFamily: MONO, fontSize: '14px', color: '#999' }}>NO STRATEGIES CREATED</span>
+              <span style={{ fontFamily: MONO, fontSize: '11px', color: '#ccc' }}>Create strategies in the Strategy Entry tab first</span>
+            </div>
+          ) : (() => {
+            const selectedIds = comparisonSelected || savedStrategies.map((s) => s.id);
+            const comparisonStrategies = savedStrategies
+              .map((s, i) => ({ ...s, _colorIndex: i }))
+              .filter((s) => selectedIds.includes(s.id));
+            const allSelected = comparisonSelected === null;
+            const toggleStrategy = (id) => {
+              if (comparisonSelected === null) {
+                // Currently all selected — deselect this one
+                setComparisonSelected(savedStrategies.map((s) => s.id).filter((sid) => sid !== id));
+              } else {
+                const isIn = comparisonSelected.includes(id);
+                const next = isIn ? comparisonSelected.filter((sid) => sid !== id) : [...comparisonSelected, id];
+                // If all are now selected, reset to null
+                if (next.length === savedStrategies.length && savedStrategies.every((s) => next.includes(s.id))) {
+                  setComparisonSelected(null);
+                } else {
+                  setComparisonSelected(next);
+                }
+              }
+            };
+            return (
+            <>
+              {/* Strategy selector + controls — single row */}
+              <div style={{ display: 'flex', alignItems: 'center', padding: '8px 20px', gap: '8px', borderBottom: '1px solid var(--ink)', flexShrink: 0, overflowX: 'auto' }}>
+                {savedStrategies.map((strat, i) => {
+                  const summary = summarizeConfig(strat.config);
+                  const color = STRATEGY_COLORS[i % STRATEGY_COLORS.length];
+                  const isSelected = selectedIds.includes(strat.id);
+                  return (
+                    <ComparisonCard
+                      key={strat.id}
+                      name={strat.name}
+                      fundSize={summary.fundSize}
+                      stages={summary.stages}
+                      color={color}
+                      isSelected={isSelected}
+                      hasResults={!!strat.results}
+                      onClick={() => toggleStrategy(strat.id)}
+                    />
+                  );
+                })}
+                <button
+                  onClick={() => setComparisonSelected(allSelected ? [] : null)}
+                  style={{
+                    padding: '8px 14px', border: '1px solid var(--ink)', background: allSelected ? 'var(--ink)' : 'transparent',
+                    color: allSelected ? 'var(--paper)' : 'var(--ink)', fontFamily: MONO, fontSize: '10px', fontWeight: 600,
+                    cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {allSelected ? 'CLEAR' : 'ALL'}
+                </button>
+                <div style={{ flex: 1 }} />
+                <span style={{ fontFamily: MONO, fontSize: '10px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>Market</span>
+                <select
+                  value={marketScenario}
+                  onChange={(e) => setMarketScenario(e.target.value)}
+                  style={{ padding: '4px 8px', fontFamily: MONO, fontSize: '11px', border: '1px solid var(--ink)', background: 'var(--paper)', color: 'var(--ink)', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="BELOW_MARKET">Bear</option>
+                  <option value="MARKET">Average</option>
+                  <option value="ABOVE_MARKET">Bull</option>
+                </select>
+                <span style={{ fontFamily: MONO, fontSize: '11px', color: '#999', whiteSpace: 'nowrap' }}>N={COMPARISON_ITERATIONS.toLocaleString()}</span>
+                <button
+                  className="btn"
+                  onClick={runAllSimulations}
+                  disabled={comparisonLoading}
+                  style={{ width: 'auto', padding: '6px 20px', fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  {comparisonLoading ? 'RUNNING...' : 'RUN ALL SIMULATIONS'}
+                </button>
+              </div>
+
+              {comparisonLoading && (
+                <div style={{ padding: '6px 20px', fontFamily: MONO, fontSize: '11px', color: '#999', animation: 'pulse 1.5s infinite', borderBottom: '1px solid var(--trace)' }}>
+                  COMPUTING {savedStrategies.length} STRATEGIES...
+                </div>
+              )}
+
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '2fr 1fr', overflow: 'hidden' }}>
+                {/* Dot Plot */}
+                <div style={{ borderRight: '1px solid var(--ink)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+                  <ComparisonDotPlot strategies={comparisonStrategies} />
+                </div>
+
+                {/* Metrics Table */}
+                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--trace)', fontFamily: MONO, fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    KEY METRICS
+                  </div>
+                  <ComparisonMetrics strategies={comparisonStrategies} />
+                </div>
+              </div>
+            </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 };
