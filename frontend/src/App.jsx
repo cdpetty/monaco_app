@@ -268,10 +268,10 @@ const StrategyCard = ({ name, code, checkSize, reserves, fundSize, stages, isAct
   </div>
 );
 
-const ComparisonCard = ({ name, fundSize, stages, color, isSelected, hasResults, onClick }) => (
-  <div onClick={onClick} style={{
+const ComparisonCard = ({ name, fundSize, stages, color, isSelected, hasResults, onClick, draggable, onDragStart, onDragOver, onDrop, onDragEnd }) => (
+  <div onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDragEnd={onDragEnd} style={{
     display: 'flex', flexDirection: 'column', gap: '2px',
-    padding: '8px 12px', border: '1px solid var(--ink)', cursor: 'pointer',
+    padding: '8px 12px', border: '1px solid var(--ink)', cursor: draggable ? 'grab' : 'pointer',
     borderLeft: isSelected ? `3px solid ${color.main}` : '1px solid var(--ink)',
     opacity: isSelected ? 1 : 0.35, transition: 'opacity 0.15s, border 0.15s',
     minWidth: '120px', background: isSelected ? color.bg : 'transparent',
@@ -572,6 +572,143 @@ const Histogram = ({ result, color }) => {
   );
 };
 
+// ─── Hero Interactive Portfolios ──────────────────────────────────
+const HERO_PORTFOLIOS = [
+  { id: 3172, investments: 42, failRate: 64, tvpi: 1.8, failed: 64, acquired: 20 },
+  { id: 3173, investments: 38, failRate: 71, tvpi: 3.2, failed: 71, acquired: 16 },
+  { id: 3174, investments: 51, failRate: 58, tvpi: 0.9, failed: 58, acquired: 24 },
+  { id: 3175, investments: 35, failRate: 60, tvpi: 2.4, failed: 60, acquired: 22 },
+  { id: 3176, investments: 44, failRate: 68, tvpi: 1.1, failed: 68, acquired: 18 },
+  { id: 3177, investments: 47, failRate: 55, tvpi: 4.7, failed: 55, acquired: 28 },
+  { id: 3178, investments: 40, failRate: 72, tvpi: 0.6, failed: 72, acquired: 14 },
+];
+
+const HeroPortfolios = () => {
+  const [active, setActive] = useState(0);
+  const labelStyle = { fontFamily: MONO, fontSize: '8px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
+      {HERO_PORTFOLIOS.map((p, i) => {
+        const isActive = active === i;
+        const alive = 100 - p.failed - p.acquired;
+        return (
+          <div
+            key={p.id}
+            onMouseEnter={() => setActive(i)}
+            style={{
+              border: '1px solid var(--ink)', borderBottom: i < HERO_PORTFOLIOS.length - 1 ? 'none' : '1px solid var(--ink)',
+              padding: isActive ? '14px 16px' : '8px 16px',
+              cursor: 'pointer', transition: 'all 0.2s ease',
+              background: isActive ? 'var(--paper)' : 'transparent',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: MONO, fontSize: isActive ? '10px' : '9px', textTransform: 'uppercase', letterSpacing: '0.1em', color: isActive ? 'var(--ink)' : '#999', fontWeight: 600, transition: 'all 0.2s' }}>
+                Portfolio #{p.id}
+              </span>
+              {!isActive && (
+                <span style={{ fontFamily: MONO, fontSize: '10px', color: '#ccc' }}>{p.tvpi}x</span>
+              )}
+            </div>
+            {isActive && (
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+                  <div>
+                    <div style={labelStyle}>Investments</div>
+                    <span style={{ fontFamily: MONO, fontSize: '18px' }}>{p.investments}</span>
+                  </div>
+                  <div>
+                    <div style={labelStyle}>Failure Rate</div>
+                    <span style={{ fontFamily: MONO, fontSize: '18px' }}>{p.failRate}%</span>
+                  </div>
+                  <div>
+                    <div style={labelStyle}>TVPI</div>
+                    <span style={{ fontFamily: MONO, fontSize: '18px' }}>{p.tvpi}x</span>
+                  </div>
+                </div>
+                <div style={{ width: '100%', height: '3px', background: 'var(--trace)', marginTop: '10px', position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: 0, width: `${p.failed}%`, height: '100%', background: '#ccc' }} />
+                  <div style={{ position: 'absolute', left: `${p.failed}%`, width: `${p.acquired}%`, height: '100%', background: '#999' }} />
+                  <div style={{ position: 'absolute', left: `${p.failed + p.acquired}%`, width: `${alive}%`, height: '100%', background: 'var(--ink)' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+                  <span style={{ fontFamily: MONO, fontSize: '8px', color: '#ccc' }}>FAILED {p.failed}%</span>
+                  <span style={{ fontFamily: MONO, fontSize: '8px', color: '#999' }}>ACQUIRED {p.acquired}%</span>
+                  <span style={{ fontFamily: MONO, fontSize: '8px', color: 'var(--ink)' }}>ALIVE {alive}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── About Page Portfolio Grid ────────────────────────────────────
+const ABOUT_PORTFOLIOS = [
+  // Column 1
+  [
+    { id: 4001, tvpi: 2.1 },
+    { id: 4002, tvpi: 0.7 },
+    { id: 4003, tvpi: 3.8 },
+    { id: 4004, tvpi: 1.4 },
+  ],
+  // Column 2
+  [
+    { id: 4008, tvpi: 5.2 },
+    { id: 4009, tvpi: 1.6 },
+    { id: 4010, tvpi: 0.8 },
+    { id: 4011, tvpi: 3.4 },
+  ],
+  // Column 3
+  [
+    { id: 4015, tvpi: 1.9 },
+    { id: 4016, tvpi: 6.1 },
+    { id: 4017, tvpi: 0.6 },
+    { id: 4018, tvpi: 2.7 },
+  ],
+];
+
+const AboutPortfolioGrid = () => {
+  const [hovered, setHovered] = useState(null); // "col-row"
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+      {ABOUT_PORTFOLIOS.map((col, ci) => (
+        <div key={ci} style={{ display: 'flex', flexDirection: 'column' }}>
+          {col.map((p, ri) => {
+            const key = `${ci}-${ri}`;
+            const isHovered = hovered === key;
+            return (
+              <div
+                key={p.id}
+                onMouseEnter={() => setHovered(key)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  border: '1px solid var(--ink)',
+                  borderBottom: ri < col.length - 1 ? 'none' : '1px solid var(--ink)',
+                  padding: '10px 18px',
+                  cursor: 'default', transition: 'background 0.15s ease',
+                  background: isHovered ? 'rgba(74, 222, 128, 0.15)' : 'transparent',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: isHovered ? 'var(--ink)' : '#999', fontWeight: 600, transition: 'color 0.15s' }}>
+                    Portfolio #{p.id}
+                  </span>
+                  <span style={{ fontFamily: MONO, fontSize: '11px', color: isHovered ? 'var(--ink)' : '#ccc', transition: 'color 0.15s' }}>{p.tvpi}x</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── Comparison Dot Plot ──────────────────────────────────────────
 const PERCENTILE_KEYS = [
   { key: 'p25_moic', label: 'P25', color: null, filled: false },
@@ -753,8 +890,8 @@ const ComparisonDotPlot = ({ strategies }) => {
               const lineH = 13;
               return (
                 <g>
-                  {/* Section label aligned with strategy names */}
-                  <text x={LEFT_PAD - 6} y={chartBottom + 18} fill="#999" fontFamily={MONO} fontSize="8" textAnchor="end">MOIC Percentiles</text>
+                  {/* Section label — left side, vertically centered */}
+                  <text x={14} y={(chartTop + chartBottom) / 2} fill="#999" fontFamily={MONO} fontSize="9" textAnchor="middle" transform={`rotate(-90, 14, ${(chartTop + chartBottom) / 2})`}>MOIC PERCENTILES</text>
                   {rows.map((row, ri) => (
                     <g key={row.label}>
                       <text x={LEFT_PAD - 6} y={baseY + ri * lineH} fill="#999" fontFamily={MONO} fontSize="8" textAnchor="end">{row.label}</text>
@@ -871,7 +1008,7 @@ const ComparisonMetrics = ({ strategies }) => {
 
 // ─── Main App ─────────────────────────────────────────────────────
 const App = () => {
-  const [activeTab, setActiveTab] = useState('entry'); // 'entry' | 'comparison'
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'entry' | 'comparison'
 
   // ── Working config (the one being edited) ──
   const [config, setConfig] = useState(() => deepCloneConfig(DEFAULT_CONFIG));
@@ -895,6 +1032,9 @@ const App = () => {
   const [savedStrategies, setSavedStrategies] = useState(loadSavedStrategies);
   const [activeStrategyId, setActiveStrategyId] = useState(null);
   const [comparisonSelected, setComparisonSelected] = useState(null); // null = all selected
+  const dragItem = React.useRef(null);
+  const dragOverItem = React.useRef(null);
+  const didDrag = React.useRef(false);
 
   // ── Inject Styles ──
   useEffect(() => {
@@ -1146,6 +1286,14 @@ const App = () => {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top Tabs */}
       <div className="top-tabs">
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px 0 16px', marginRight: '4px', whiteSpace: 'nowrap', userSelect: 'none' }}>
+          <span style={{ fontFamily: MONO, fontSize: '13px', fontWeight: 700, letterSpacing: '0.02em' }}>
+            <span style={{ color: '#dc2626' }}>[</span>Monaco — VC Fund Simulator<span style={{ color: '#dc2626' }}>]</span>
+          </span>
+        </div>
+        <button className={`top-tab ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
+          Home
+        </button>
         <button className={`top-tab ${activeTab === 'entry' ? 'active' : ''}`} onClick={() => {
           setActiveTab('entry');
           if (activeStrategyId == null && savedStrategies.length > 0) loadStrategy(savedStrategies[0]);
@@ -1154,6 +1302,9 @@ const App = () => {
         </button>
         <button className={`top-tab ${activeTab === 'comparison' ? 'active' : ''}`} onClick={() => setActiveTab('comparison')}>
           Strategy Comparison
+        </button>
+        <button className={`top-tab ${activeTab === 'about' ? 'active' : ''}`} onClick={() => setActiveTab('about')}>
+          About &amp; Contact
         </button>
         <div style={{ flex: 1 }} />
         <a href="#/markets" style={{
@@ -1171,6 +1322,295 @@ const App = () => {
           <span style={{ color: '#dc2626', fontWeight: 600 }}>ERROR</span>
           <span style={{ flex: 1, color: '#666' }}>{error}</span>
           <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#999' }}>×</button>
+        </div>
+      )}
+
+      {/* ═══════════ HOME TAB ═══════════ */}
+      {activeTab === 'home' && (
+        <div style={{ flex: 1, overflow: 'auto', background: 'var(--paper)' }}>
+          {/* Hero */}
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '100px 40px 60px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '64px', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}><span style={{ color: '#dc2626' }}>[</span><span style={{ color: '#999' }}>Monaco — VC Fund Simulator</span><span style={{ color: '#dc2626' }}>]</span></span>
+                <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '48px', fontWeight: 600, lineHeight: 1.1, margin: '16px 0 24px', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                  Visualize Fund Returns.<br />
+                  <span style={{ color: '#999' }}>Understand the Power Law.</span>
+                </h1>
+                <p style={{ fontSize: '15px', color: '#666', lineHeight: 1.6, maxWidth: '50ch' }}>
+                  VC firms have a lot to consider when they invest their funds. Portfolio size, entry ownership, follow-on reserves, and other strategic decisions have huge impacts on expected returns.
+                </p>
+                <div style={{ marginTop: '32px', display: 'flex', gap: '12px' }}>
+                  <button className="btn" onClick={() => setActiveTab('entry')} style={{ width: 'auto', padding: '12px 28px' }}>
+                    Start Simulating
+                  </button>
+                </div>
+              </div>
+
+              {/* Interactive portfolio cards */}
+              <HeroPortfolios />
+            </div>
+          </section>
+
+          {/* Divider */}
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+            <div style={{ height: '1px', background: 'var(--ink)' }} />
+          </div>
+
+          {/* Why Simulation Matters */}
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px' }}>
+            <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Why Simulation Matters</span>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '40px' }}>
+              The Mathematics of Outliers
+            </h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '32px' }}>
+              {/* Power Law */}
+              <div>
+                <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '17px', fontWeight: 600, textTransform: 'uppercase', marginBottom: '10px' }}>Power Law Dynamics</h3>
+                <p style={{ fontSize: '13px', color: '#666', lineHeight: 1.6 }}>
+                  In venture, returns are not normally distributed. A single outlier can return the entire fund. We model the posibility of this across thousands of portfolios simultaneously.
+                </p>
+                <div style={{ border: '1px solid var(--ink)', padding: '14px', marginTop: '20px' }}>
+                  <span style={{ fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Return Distribution Shape</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '60px', marginTop: '10px' }}>
+                    {[5, 12, 45, 90, 35, 15, 8, 5, 3, 2, 2, 1].map((h, i) => (
+                      <div key={i} style={{ flex: 1, height: `${h}%`, background: i === 3 ? 'var(--ink)' : 'rgba(0,0,0,0.15)' }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Portfolio Construction */}
+              <div>
+                <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '17px', fontWeight: 600, textTransform: 'uppercase', marginBottom: '10px' }}>Portfolio Construction</h3>
+                <p style={{ fontSize: '13px', color: '#666', lineHeight: 1.6 }}>
+                  How many checks should you write? How much follow-on reserve? See how portfolio construction decisions impact your probability of capturing a fund-returner.
+                </p>
+                <div style={{ border: '1px solid var(--ink)', padding: '14px', marginTop: '20px' }}>
+                  {[{ label: 'Check Size', value: '$1.5M' }, { label: 'Follow-On Reserve', value: '40%' }, { label: 'Portfolio Size', value: '~45 cos' }].map((row, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: i < 2 ? '1px solid var(--trace)' : 'none' }}>
+                      <span style={{ fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999', fontWeight: 600 }}>{row.label}</span>
+                      <span style={{ fontFamily: MONO, fontSize: '13px' }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scenario Planning */}
+              <div>
+                <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '17px', fontWeight: 600, textTransform: 'uppercase', marginBottom: '10px' }}>Changing fund strategy</h3>
+                <p style={{ fontSize: '13px', color: '#666', lineHeight: 1.6 }}>
+					Funds are moving earlier or later in the investment cycles. Series A funds are investing at seed. New seed funds are investing at Series A and B. These decisions have profound impacts on fund returns.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '20px' }}>
+                  {[{ label: 'Pre-Seed', value: '20%' }, { label: 'Seed', value: '50%' }, { label: 'Series A', value: '30%' }].map((item, i) => (
+                    <div key={i} style={{ border: '1px solid var(--ink)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999', fontWeight: 600 }}>{item.label}</span>
+                      <span style={{ fontFamily: MONO, fontSize: '18px' }}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Divider */}
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+            <div style={{ height: '1px', background: 'var(--ink)' }} />
+          </div>
+
+          {/* Distribution Preview */}
+          {(() => {
+            // Realistic MOIC distribution: right-skewed, peaks around 0.8-1.2x, long right tail
+            // 40 bins covering 0x to 10x (each bin = 0.25x)
+            const bins = [
+              2, 5, 10, 18, 35, 55, 78, 95, 100, 92,
+              80, 65, 50, 38, 28, 22, 17, 13, 10, 8,
+              7, 5, 4, 4, 3, 3, 2, 2, 2, 1,
+              1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+            ];
+            const maxBin = Math.max(...bins);
+            // Percentile bars: P25=bin 5 (~1.25x), P50=bin 8 (~2.0x), P75=bin 13 (~3.25x), P90=bin 19 (~4.75x)
+            const percentiles = [
+              { bin: 5, label: 'P25', value: '1.3x', color: '#999' },
+              { bin: 8, label: 'P50', value: '2.0x', color: '#000' },
+              { bin: 13, label: 'P75', value: '3.3x', color: '#16a34a' },
+              { bin: 19, label: 'P90', value: '4.8x', color: '#2563eb' },
+            ];
+            const pBins = new Set(percentiles.map((p) => p.bin));
+            const pMap = {};
+            percentiles.forEach((p) => { pMap[p.bin] = p; });
+            return (
+            <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px 100px' }}>
+              <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Simulate a fund strategy thousands of times</span>
+              <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px' }}>
+                Fund Return Distribution (N=5,000)
+              </h2>
+              <p style={{ fontSize: '14px', color: '#666', lineHeight: 1.6, maxWidth: '60ch', marginTop: '8px', marginBottom: '20px' }}>
+                Simulate a fund strategy thousands of times to see the likelihood of different outcomes. Understand what it takes to generate a 4x+ MOIC outcome.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                {[{ label: 'Fund Size', value: '$100M' }, { label: 'Follow-On', value: '40%' }, { label: 'Stage', value: 'Seed' }, { label: 'Entry Ownership', value: '10%' }].map((item) => (
+                  <div key={item.label} style={{ border: '1px solid var(--ink)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999', fontWeight: 600 }}>{item.label}</span>
+                    <span style={{ fontFamily: MONO, fontSize: '12px', fontWeight: 500 }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ border: '1px solid var(--ink)', padding: '24px 24px 12px', position: 'relative' }}>
+                <span style={{ position: 'absolute', top: '10px', right: '14px', fontFamily: MONO, fontSize: '9px', color: '#ccc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fake Data</span>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '180px', position: 'relative' }}>
+                  {bins.map((h, i) => {
+                    const isP = pBins.has(i);
+                    const pInfo = pMap[i];
+                    return (
+                      <div key={i} style={{ flex: 1, position: 'relative', height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+                        <div style={{
+                          width: '100%', height: `${maxBin > 0 ? (h / maxBin) * 100 : 0}%`,
+                          background: isP ? pInfo.color : 'rgba(0,0,0,0.12)',
+                          minHeight: h > 0 ? '1px' : 0,
+                        }} />
+                        {isP && (
+                          <div style={{
+                            position: 'absolute', top: '-18px', left: '50%', transform: 'translateX(-50%)',
+                            fontFamily: MONO, fontSize: '8px', fontWeight: 600, color: pInfo.color,
+                            whiteSpace: 'nowrap', textAlign: 'center',
+                          }}>
+                            {pInfo.label} {pInfo.value}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontFamily: MONO, fontSize: '10px', color: '#999' }}>
+                  <span>0x</span><span>2.5x</span><span>5.0x</span><span>7.5x</span><span>10x+</span>
+                </div>
+                {/* Percentile legend */}
+                <div style={{ display: 'flex', gap: '16px', marginTop: '10px', borderTop: '1px solid var(--trace)', paddingTop: '10px' }}>
+                  {percentiles.map((p) => (
+                    <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{ width: '8px', height: '8px', background: p.color }} />
+                      <span style={{ fontFamily: MONO, fontSize: '9px', color: p.color, fontWeight: 600 }}>{p.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+            );
+          })()}
+
+          {/* Divider */}
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+            <div style={{ height: '1px', background: 'var(--ink)' }} />
+          </div>
+
+          {/* Strategy Comparison Preview */}
+          {(() => {
+            const strats = [
+              { name: 'SEED FOCUS', color: STRATEGY_COLORS[0], p25: 1.1, p50: 1.8, p75: 3.0, p90: 4.5, p95: 6.2, fundSize: '$200M', stages: 'PS, S', portcos: '52' },
+              { name: 'SERIES A HEAVY', color: STRATEGY_COLORS[1], p25: 0.9, p50: 1.5, p75: 2.6, p90: 4.0, p95: 5.5, fundSize: '$200M', stages: 'S, A', portcos: '28' },
+              { name: 'DIVERSIFIED', color: STRATEGY_COLORS[2], p25: 1.0, p50: 1.6, p75: 2.8, p90: 3.8, p95: 4.8, fundSize: '$200M', stages: 'PS, S, A', portcos: '40' },
+            ];
+            const axisMax = 8;
+            const VW = 700, VH = 380;
+            const LP = 100, RP = 30, TP = 50, BL = 80;
+            const chartTop = TP, chartBottom = VH - BL;
+            const chartH = chartBottom - chartTop;
+            const colW = (VW - LP - RP) / strats.length;
+            const toY = (v) => chartBottom - (chartH * v) / axisMax;
+            const ticks = [0, 2, 4, 6, 8];
+            const pKeys = [
+              { key: 'p25', label: 'P25', color: '#999', filled: false },
+              { key: 'p50', label: 'P50', color: '#999', filled: true },
+              { key: 'p75', label: 'P75', color: '#16a34a', filled: true },
+              { key: 'p90', label: 'P90', color: '#2563eb', filled: true },
+              { key: 'p95', label: 'P95', color: '#000', filled: false },
+            ];
+            const detailRows = [
+              { label: 'Fund Size', get: (s) => s.fundSize },
+              { label: 'Stages', get: (s) => s.stages },
+              { label: '# of Portcos', get: (s) => s.portcos },
+            ];
+            return (
+            <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px 100px' }}>
+              <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Side-by-Side Analysis</span>
+              <div style={{ marginBottom: '20px', marginTop: '8px' }}>
+                <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Compare Fund Strategies
+                </h2>
+                <p style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '15px', color: '#666', marginTop: '8px', lineHeight: '1.5', maxWidth: '700px' }}>
+                  Assess the impact of investing with different strategies. Flex variables like entry ownership, investment stage (e.g., pre-seed vs. seed vs. Series A), portfolio size, follow-on reserves and follow-on strategy.
+                </p>
+              </div>
+              <div style={{ border: '1px solid var(--ink)', padding: '16px 0 0', position: 'relative' }}>
+                <span style={{ position: 'absolute', top: '10px', right: '14px', fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#bbb', zIndex: 1 }}>Fake Data</span>
+                <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%' }}>
+                  {/* Y-axis grid */}
+                  {ticks.map((tick) => (
+                    <g key={tick}>
+                      <line x1={LP} y1={toY(tick)} x2={VW - RP} y2={toY(tick)} stroke="rgba(0,0,0,0.08)" strokeWidth="1" />
+                      <text x={LP - 8} y={toY(tick) + 3} fill="#999" fontFamily={MONO} fontSize="9" textAnchor="end">{tick}x</text>
+                    </g>
+                  ))}
+
+                  {/* Percentile legend */}
+                  {pKeys.map((p, i) => {
+                    const lx = LP + i * 60;
+                    return (
+                      <g key={p.key}>
+                        <circle cx={lx} cy={20} r={3.5} fill={p.filled ? p.color : 'none'} stroke={p.color} strokeWidth={p.filled ? 0 : 1.5} />
+                        <text x={lx + 10} y={24} fill={p.color} fontFamily={MONO} fontSize="9">{p.label}</text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Strategy columns */}
+                  {strats.map((s, si) => {
+                    const cx = LP + si * colW + colW / 2;
+                    const c = s.color;
+                    return (
+                      <g key={s.name}>
+                        {si > 0 && <line x1={LP + si * colW} y1={chartTop} x2={LP + si * colW} y2={chartBottom} stroke="rgba(0,0,0,0.06)" strokeWidth="1" />}
+                        {/* Name */}
+                        <text x={cx} y={chartBottom + 18} fill={c.main} fontFamily={MONO} fontSize="11" fontWeight="700" textAnchor="middle">{s.name}</text>
+                        {/* Whisker */}
+                        <line x1={cx} y1={toY(s.p95)} x2={cx} y2={toY(s.p25)} stroke={c.dim} strokeWidth="1.5" />
+                        {/* Box */}
+                        <rect x={cx - 14} y={toY(s.p90)} width={28} height={Math.max(toY(s.p75) - toY(s.p90), 1)} fill={c.bg} stroke={c.dim} strokeWidth="1" rx="2" />
+                        {/* Dots */}
+                        {pKeys.map((p) => {
+                          const val = s[p.key];
+                          const y = toY(val);
+                          const dotColor = p.color === '#999' || p.color === '#000' ? (p.filled ? p.color : c.dim) : p.color;
+                          return (
+                            <g key={p.key}>
+                              <circle cx={cx} cy={y} r={4} fill={p.filled ? dotColor : 'var(--paper)'} stroke={dotColor} strokeWidth={p.filled ? 0 : 1.5} />
+                              <text x={cx + 10} y={y + 3} fill={dotColor} fontFamily={MONO} fontSize="8" fontWeight={p.filled ? '700' : '400'}>{val.toFixed(1)}x</text>
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  })}
+
+                  {/* Section label — left side, vertically centered */}
+                  <text x={14} y={(chartTop + chartBottom) / 2} fill="#999" fontFamily={MONO} fontSize="9" textAnchor="middle" transform={`rotate(-90, 14, ${(chartTop + chartBottom) / 2})`}>MOIC PERCENTILES</text>
+                  {/* Detail rows */}
+                  {detailRows.map((row, ri) => (
+                    <g key={row.label}>
+                      <text x={LP - 6} y={chartBottom + 32 + ri * 13} fill="#999" fontFamily={MONO} fontSize="8" textAnchor="end">{row.label}</text>
+                      {strats.map((s, si) => (
+                        <text key={si} x={LP + si * colW + colW / 2} y={chartBottom + 32 + ri * 13} fill="#000" fontFamily={MONO} fontSize="8.5" fontWeight="400" textAnchor="middle">{row.get(s)}</text>
+                      ))}
+                    </g>
+                  ))}
+                </svg>
+              </div>
+            </section>
+            );
+          })()}
         </div>
       )}
 
@@ -1368,7 +1808,26 @@ const App = () => {
                       color={color}
                       isSelected={isSelected}
                       hasResults={!!strat.results}
-                      onClick={() => toggleStrategy(strat.id)}
+                      onClick={() => { if (!didDrag.current) toggleStrategy(strat.id); didDrag.current = false; }}
+                      draggable
+                      onDragStart={(e) => { didDrag.current = true; dragItem.current = i; e.dataTransfer.effectAllowed = 'move'; }}
+                      onDragOver={(e) => { e.preventDefault(); dragOverItem.current = i; }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragItem.current !== null && dragOverItem.current !== null && dragItem.current !== dragOverItem.current) {
+                          const from = dragItem.current;
+                          const to = dragOverItem.current;
+                          setSavedStrategies((prev) => {
+                            const reordered = [...prev];
+                            const [moved] = reordered.splice(from, 1);
+                            reordered.splice(to, 0, moved);
+                            return reordered;
+                          });
+                        }
+                        dragItem.current = null;
+                        dragOverItem.current = null;
+                      }}
+                      onDragEnd={() => { dragItem.current = null; dragOverItem.current = null; }}
                     />
                   );
                 })}
@@ -1427,6 +1886,58 @@ const App = () => {
             </>
             );
           })()}
+        </div>
+      )}
+
+      {/* ═══════════ ABOUT & CONTACT TAB ═══════════ */}
+      {activeTab === 'about' && (
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px' }}>
+            <div style={{ marginBottom: '40px' }}>
+              <AboutPortfolioGrid />
+            </div>
+
+            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>About</span>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+              Monaco Fund Simulator
+            </h2>
+            <p style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7 }}>
+              Venture fund economics are fascinating, especially in this rapidly evolving early stage software market. We built this simulator as part of the research for our own early stage AI/ML fund, <a href="https://gradient.com" target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 600 }}>Gradient</a>. If you want to chat about venture fund economics, feel free to reach out to me at clayton [at] gradient.com. You can find more details about me <a href="https://claytonpetty.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a>. Happy investing!
+            </p>
+
+            <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
+
+            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Source Code</span>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '12px' }}>
+              GitHub
+            </h2>
+            <p style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7, marginBottom: '16px' }}>
+              Monaco Fund Simulator is open source. However, please be kind as much of the actual data science work was done in Hex and then Claude did the hard (and at times, sloppy) work of building the app.
+            </p>
+            <a href="https://github.com/monaco-app" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '10px 20px', border: '1px solid var(--ink)', fontFamily: MONO, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink)', textDecoration: 'none', fontWeight: 600 }}>
+              View on GitHub
+            </a>
+
+            <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
+
+            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Further Reading</span>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+              Other Great Writing About Fund Economics
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[
+                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
+                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
+                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
+                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
+              ].map((article, i) => (
+                <a key={i} href={article.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', border: '1px solid var(--ink)', textDecoration: 'none', color: 'var(--ink)', transition: 'background 0.15s' }}>
+                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '19px', fontWeight: 600 }}>{article.title}</span>
+                  <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999' }}>{article.source}</span>
+                </a>
+              ))}
+            </div>
+          </section>
         </div>
       )}
     </div>
