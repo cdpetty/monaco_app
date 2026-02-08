@@ -1217,6 +1217,7 @@ const App = () => {
   // ── Run All Simulations (comparison page) ──
   const COMPARISON_ITERATIONS = 7000;
   const [comparisonLoading, setComparisonLoading] = useState(false);
+  const comparisonInitialized = React.useRef(false);
 
   const runAllSimulations = useCallback(async () => {
     const strategiesToRun = savedStrategies.filter((s) => s.config);
@@ -1257,6 +1258,14 @@ const App = () => {
       setComparisonLoading(false);
     }
   }, [savedStrategies, marketScenario, activeStrategyId]);
+
+  // ── Auto-run simulations on first comparison tab visit ──
+  React.useEffect(() => {
+    if (activeTab === 'comparison' && !comparisonInitialized.current && savedStrategies.length > 0) {
+      comparisonInitialized.current = true;
+      runAllSimulations();
+    }
+  }, [activeTab, savedStrategies, runAllSimulations]);
 
   // ── Deployed capital calc ──
   const fs = config.fund_size_m || 0;
@@ -1770,6 +1779,11 @@ const App = () => {
               <span style={{ fontFamily: MONO, fontSize: '14px', color: '#999' }}>NO STRATEGIES CREATED</span>
               <span style={{ fontFamily: MONO, fontSize: '11px', color: '#ccc' }}>Create strategies in the Strategy Entry tab first</span>
             </div>
+          ) : comparisonLoading && !savedStrategies.some((s) => s.results) ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
+              <span style={{ fontFamily: MONO, fontSize: '14px', color: '#999', animation: 'pulse 1.5s infinite' }}>RUNNING SIMULATIONS...</span>
+              <span style={{ fontFamily: MONO, fontSize: '11px', color: '#ccc' }}>Computing {savedStrategies.length} {savedStrategies.length === 1 ? 'strategy' : 'strategies'} with {COMPARISON_ITERATIONS.toLocaleString()} iterations each</span>
+            </div>
           ) : (() => {
             const selectedIds = comparisonSelected || savedStrategies.map((s) => s.id);
             const comparisonStrategies = savedStrategies
@@ -1902,8 +1916,20 @@ const App = () => {
               Monaco Fund Simulator
             </h2>
             <p style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7 }}>
-              Venture fund economics are fascinating, especially in this rapidly evolving early stage software market. We built this simulator as part of the research for our own early stage AI/ML fund, <a href="https://gradient.com" target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 600 }}>Gradient</a>. If you want to chat about venture fund economics, feel free to reach out to me at clayton [at] gradient.com. You can find more details about me <a href="https://claytonpetty.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a>. Happy investing!
+              Venture fund economics are fascinating, especially in this rapidly evolving early stage software market. We built this simulator as part of the research for our own early stage AI/ML fund, <a href="https://gradient.com" target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 600 }}>Gradient</a>. <br/> <br/>If you want to chat about venture fund economics, feel free to reach out to me at clayton [at] gradient.com. You can find more details about me <a href="https://claytonpetty.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a> and <a href="https://www.linkedin.com/in/cdpetty/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a>. <br/> <br/> A special thanks to my colleague Zach Bratun-Glennon at Gradient for problem solving this and <a href="https://www.linkedin.com/in/peterjameswalker/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Peter Walker</a> at <a href="https://carta.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Carta</a> for collaborating with us on the data that drives the underlying graduation rate and valuation assumptions.<br/> <br/> Happy investing!
             </p>
+
+            <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
+
+            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Getting Started</span>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+              How to Use
+            </h2>
+            <ol style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7, paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <li>The simulator is best used by pre-seed, seed, and some select Series A funds (particularly those that do seed and A).</li>
+              <li>The base market case is built on market data from <a href="https://carta.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Carta</a> (<a href="https://www.linkedin.com/posts/peterjameswalker_seed-to-series-a-graduation-rate-activity-7292256120423755777-bu8o?utm_source=share&utm_medium=member_desktop&rcm=ACoAABafbR8BDcy1wnDzXevSXgZAK-jqfPLKZVM" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>this post</a>) and other sources that document historical graduation rates of companies from stage to stage.</li>
+              <li>You can tweak market assumptions if you are interested.</li>
+            </ol>
 
             <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
 
