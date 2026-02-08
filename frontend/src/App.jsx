@@ -180,6 +180,21 @@ function buildSimPayload(config, marketScenario, numIterations) {
 // ─── Style Constants ──────────────────────────────────────────────
 const MONO = "'JetBrains Mono', monospace";
 
+// ─── Mobile Detection Hook ───────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    setIsMobile(mql.matches);
+    return () => mql.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 // ─── Reusable Components ──────────────────────────────────────────
 const InputGroup = ({ label, value, onChange, type = 'text', rightLabel }) => (
   <div className="input-group">
@@ -585,11 +600,13 @@ const HERO_PORTFOLIOS = [
 
 const HeroPortfolios = () => {
   const [active, setActive] = useState(0);
+  const mobile = useIsMobile();
   const labelStyle = { fontFamily: MONO, fontSize: '8px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' };
+  const visiblePortfolios = mobile ? HERO_PORTFOLIOS.slice(0, 4) : HERO_PORTFOLIOS;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
-      {HERO_PORTFOLIOS.map((p, i) => {
+      {visiblePortfolios.map((p, i) => {
         const isActive = active === i;
         const alive = 100 - p.failed - p.acquired;
         return (
@@ -673,9 +690,10 @@ const ABOUT_PORTFOLIOS = [
 
 const AboutPortfolioGrid = () => {
   const [hovered, setHovered] = useState(null); // "col-row"
+  const mobile = useIsMobile();
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr 1fr', gap: '12px' }}>
       {ABOUT_PORTFOLIOS.map((col, ci) => (
         <div key={ci} style={{ display: 'flex', flexDirection: 'column' }}>
           {col.map((p, ri) => {
@@ -1008,7 +1026,9 @@ const ComparisonMetrics = ({ strategies }) => {
 
 // ─── Main App ─────────────────────────────────────────────────────
 const App = () => {
+  const mobile = useIsMobile();
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'entry' | 'comparison'
+  const [entryPanel, setEntryPanel] = useState('strategy'); // 'strategy' | 'variables' | 'results'
 
   // ── Working config (the one being edited) ──
   const [config, setConfig] = useState(() => deepCloneConfig(DEFAULT_CONFIG));
@@ -1124,6 +1144,18 @@ const App = () => {
       .panel-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 2px; }
 
       @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+      @media (max-width: 767px) {
+        .top-tabs { flex-wrap: wrap; }
+        .top-tab { padding: 10px 14px; font-size: 13px; }
+        .panel-content { padding: 16px; gap: 16px; }
+        .panel-header { padding: 10px 16px; }
+        .stats-overlay { grid-template-columns: repeat(3, 1fr) !important; }
+        .btn { padding: 10px 16px; font-size: 13px; }
+        .entry-sub-tabs { display: flex; border-bottom: 2px solid var(--ink); flex-shrink: 0; }
+        .entry-sub-tab { flex: 1; padding: 10px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; border: none; background: transparent; color: #999; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.15s; text-align: center; }
+        .entry-sub-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+      }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(linkFont); document.head.removeChild(style); };
@@ -1295,9 +1327,13 @@ const App = () => {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top Tabs */}
       <div className="top-tabs">
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px 0 16px', marginRight: '4px', whiteSpace: 'nowrap', userSelect: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: mobile ? '0 10px 0 10px' : '0 20px 0 16px', marginRight: '4px', whiteSpace: 'nowrap', userSelect: 'none' }}>
           <span style={{ fontFamily: MONO, fontSize: '13px', fontWeight: 700, letterSpacing: '0.02em' }}>
-            <span style={{ color: '#dc2626' }}>[</span>Monaco — VC Fund Simulator<span style={{ color: '#dc2626' }}>]</span>
+            {mobile ? (
+              <><span style={{ color: '#dc2626' }}>[</span>M<span style={{ color: '#dc2626' }}>]</span></>
+            ) : (
+              <><span style={{ color: '#dc2626' }}>[</span>Monaco — VC Fund Simulator<span style={{ color: '#dc2626' }}>]</span></>
+            )}
           </span>
         </div>
         <button className={`top-tab ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
@@ -1307,23 +1343,25 @@ const App = () => {
           setActiveTab('entry');
           if (activeStrategyId == null && savedStrategies.length > 0) loadStrategy(savedStrategies[0]);
         }}>
-          Strategy Entry
+          {mobile ? 'Individual' : 'Individual Strategies'}
         </button>
         <button className={`top-tab ${activeTab === 'comparison' ? 'active' : ''}`} onClick={() => setActiveTab('comparison')}>
-          Strategy Comparison
+          {mobile ? 'Compare' : 'Strategy Comparison'}
         </button>
         <button className={`top-tab ${activeTab === 'about' ? 'active' : ''}`} onClick={() => setActiveTab('about')}>
-          About &amp; Contact
+          About
         </button>
-        <div style={{ flex: 1 }} />
-        <a href="#/markets" style={{
-          fontFamily: MONO, fontSize: '11px', color: '#999', textDecoration: 'none',
-          padding: '8px 20px', letterSpacing: '0.03em', alignSelf: 'center',
-          transition: 'color 0.15s',
-        }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = '#999'; }}
-        >View / Edit Market Data</a>
+        {!mobile && <div style={{ flex: 1 }} />}
+        {!mobile && (
+          <a href="#/markets" style={{
+            fontFamily: MONO, fontSize: '11px', color: '#999', textDecoration: 'none',
+            padding: '8px 20px', letterSpacing: '0.03em', alignSelf: 'center',
+            transition: 'color 0.15s',
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#999'; }}
+          >View / Edit Market Data</a>
+        )}
       </div>
 
       {error && (
@@ -1338,11 +1376,11 @@ const App = () => {
       {activeTab === 'home' && (
         <div style={{ flex: 1, overflow: 'auto', background: 'var(--paper)' }}>
           {/* Hero */}
-          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '100px 40px 60px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '64px', alignItems: 'center' }}>
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '48px 16px 32px' : '100px 40px 60px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1.4fr 1fr', gap: mobile ? '32px' : '64px', alignItems: 'center' }}>
               <div>
                 <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}><span style={{ color: '#dc2626' }}>[</span><span style={{ color: '#999' }}>Monaco — VC Fund Simulator</span><span style={{ color: '#dc2626' }}>]</span></span>
-                <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '48px', fontWeight: 600, lineHeight: 1.1, margin: '16px 0 24px', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '32px' : '48px', fontWeight: 600, lineHeight: 1.1, margin: '16px 0 24px', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
                   Visualize Fund Returns.<br />
                   <span style={{ color: '#999' }}>Understand the Power Law.</span>
                 </h1>
@@ -1362,18 +1400,18 @@ const App = () => {
           </section>
 
           {/* Divider */}
-          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '0 16px' : '0 40px' }}>
             <div style={{ height: '1px', background: 'var(--ink)' }} />
           </div>
 
           {/* Why Simulation Matters */}
-          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px' }}>
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '32px 16px' : '60px 40px' }}>
             <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Why Simulation Matters</span>
             <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '40px' }}>
               The Mathematics of Outliers
             </h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr 1fr', gap: '32px' }}>
               {/* Power Law */}
               <div>
                 <h3 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '17px', fontWeight: 600, textTransform: 'uppercase', marginBottom: '10px' }}>Power Law Dynamics</h3>
@@ -1425,7 +1463,7 @@ const App = () => {
           </section>
 
           {/* Divider */}
-          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '0 16px' : '0 40px' }}>
             <div style={{ height: '1px', background: 'var(--ink)' }} />
           </div>
 
@@ -1451,7 +1489,7 @@ const App = () => {
             const pMap = {};
             percentiles.forEach((p) => { pMap[p.bin] = p; });
             return (
-            <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px 100px' }}>
+            <section style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '32px 16px 60px' : '60px 40px 100px' }}>
               <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Simulate a fund strategy thousands of times</span>
               <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px' }}>
                 Fund Return Distribution (N=5,000)
@@ -1459,7 +1497,7 @@ const App = () => {
               <p style={{ fontSize: '14px', color: '#666', lineHeight: 1.6, maxWidth: '60ch', marginTop: '8px', marginBottom: '20px' }}>
                 Simulate a fund strategy thousands of times to see the likelihood of different outcomes. Understand what it takes to generate a 4x+ MOIC outcome.
               </p>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
                 {[{ label: 'Fund Size', value: '$100M' }, { label: 'Follow-On', value: '40%' }, { label: 'Stage', value: 'Seed' }, { label: 'Entry Ownership', value: '10%' }].map((item) => (
                   <div key={item.label} style={{ border: '1px solid var(--ink)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontFamily: MONO, fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999', fontWeight: 600 }}>{item.label}</span>
@@ -1467,7 +1505,7 @@ const App = () => {
                   </div>
                 ))}
               </div>
-              <div style={{ border: '1px solid var(--ink)', padding: '24px 24px 12px', position: 'relative' }}>
+              <div style={{ border: '1px solid var(--ink)', padding: mobile ? '16px 12px 12px' : '24px 24px 12px', position: 'relative' }}>
                 <span style={{ position: 'absolute', top: '10px', right: '14px', fontFamily: MONO, fontSize: '9px', color: '#ccc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fake Data</span>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '180px', position: 'relative' }}>
                   {bins.map((h, i) => {
@@ -1511,7 +1549,7 @@ const App = () => {
           })()}
 
           {/* Divider */}
-          <div style={{ maxWidth: '960px', margin: '0 auto', padding: '0 40px' }}>
+          <div style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '0 16px' : '0 40px' }}>
             <div style={{ height: '1px', background: 'var(--ink)' }} />
           </div>
 
@@ -1543,7 +1581,7 @@ const App = () => {
               { label: '# of Portcos', get: (s) => s.portcos },
             ];
             return (
-            <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px 100px' }}>
+            <section style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '32px 16px 60px' : '60px 40px 100px' }}>
               <span style={{ fontFamily: MONO, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Side-by-Side Analysis</span>
               <div style={{ marginBottom: '20px', marginTop: '8px' }}>
                 <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '28px', fontWeight: 600, textTransform: 'uppercase' }}>
@@ -1624,14 +1662,9 @@ const App = () => {
       )}
 
       {/* ═══════════ STRATEGY ENTRY TAB ═══════════ */}
-      {activeTab === 'entry' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 320px 1fr', flex: 1, overflow: 'hidden' }}>
-          {/* Panel 1: Strategy List */}
-          <aside className="panel">
-            <div className="panel-header">
-              <h2>1. Strategy</h2>
-              <span className="mono">SELECT</span>
-            </div>
+      {activeTab === 'entry' && (() => {
+        const strategyPanel = (
+          <>
             <div className="panel-content">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div className="input-label" style={{ fontSize: '12px', color: '#666' }}>SAVED MODELS</div>
@@ -1673,49 +1706,44 @@ const App = () => {
                 </button>
               </div>
             </div>
-          </aside>
+          </>
+        );
 
-          {/* Panel 2: Variables */}
-          <aside className="panel" style={activeStrategyId == null ? { opacity: 0.35, pointerEvents: 'none' } : {}}>
-            <div className="panel-header">
-              <h2>2. Variables</h2>
-              <span className="mono">{activeStrategyId == null ? 'SELECT A STRATEGY' : 'INPUT'}</span>
+        const variablesPanel = (
+          <div className="panel-content" style={activeStrategyId == null ? { opacity: 0.35, pointerEvents: 'none' } : {}}>
+            <SliderInput label="FUND SIZE" value={config.fund_size_m} onChange={(v) => setField('fund_size_m', v)} min={0} max={600} step={5} unit="M" />
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <NumberInput label="MGMT FEE (% / YR)" value={config.management_fee_pct} onChange={(v) => setField('management_fee_pct', v)} min={0} max={10} step={0.5} />
+              <NumberInput label="FEE DURATION (YRS)" value={10} onChange={() => {}} disabled />
             </div>
-            <div className="panel-content">
-              <SliderInput label="FUND SIZE" value={config.fund_size_m} onChange={(v) => setField('fund_size_m', v)} min={0} max={600} step={5} unit="M" />
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <NumberInput label="MGMT FEE (% / YR)" value={config.management_fee_pct} onChange={(v) => setField('management_fee_pct', v)} min={0} max={10} step={0.5} />
-                <NumberInput label="FEE DURATION (YRS)" value={10} onChange={() => {}} disabled />
-              </div>
+            <SliderInput label="RECYCLED CAPITAL" value={config.recycled_capital_pct} onChange={(v) => setField('recycled_capital_pct', v)} min={0} max={40} step={5} unit="%" />
 
-              <SliderInput label="RECYCLED CAPITAL" value={config.recycled_capital_pct} onChange={(v) => setField('recycled_capital_pct', v)} min={0} max={40} step={5} unit="%" />
-
-              <div className="deployed-calc">
-                <span style={{ color: 'var(--ink)' }}>${Math.round(fs)}M</span> − <span style={{ color: '#dc2626' }}>${Math.round(fees)}M fees</span> + <span style={{ color: '#16a34a' }}>${Math.round(recycled)}M recycled</span> = <strong>${Math.round(deployed)}M deployed</strong>
-              </div>
-
-              <div className="section-divider" style={{ marginTop: '-12px' }} />
-              <div className="input-label" style={{ marginTop: '-12px', marginBottom: '-8px' }}>PORTFOLIO CONSTRUCTION</div>
-
-              <SliderInput label="FOLLOW-ON RESERVE" value={config.dry_powder_reserve_for_pro_rata} onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)} min={0} max={70} step={5} unit="%" />
-
-              <div className="checkbox-row">
-                <input type="checkbox" id="reinvest" checked={config.reinvest_unused_reserve !== false} onChange={(e) => setField('reinvest_unused_reserve', e.target.checked)} />
-                <label htmlFor="reinvest" style={{ cursor: 'pointer' }}>Re-invest unused reserve</label>
-              </div>
-
-              <NumberInput label="PRO-RATA MAX VALUATION ($M)" value={config.pro_rata_max_valuation} onChange={(v) => setField('pro_rata_max_valuation', v)} min={0} max={10000} step={10} />
-
-              <StageAllocationTable stageAllocations={config.stage_allocations} onStageAllocationsChange={(v) => setField('stage_allocations', v)} />
-
+            <div className="deployed-calc">
+              <span style={{ color: 'var(--ink)' }}>${Math.round(fs)}M</span> − <span style={{ color: '#dc2626' }}>${Math.round(fees)}M fees</span> + <span style={{ color: '#16a34a' }}>${Math.round(recycled)}M recycled</span> = <strong>${Math.round(deployed)}M deployed</strong>
             </div>
-          </aside>
 
-          {/* Panel 3: Single Strategy Results */}
-          <main className="panel" style={{ overflow: 'hidden' }}>
-            <div className="panel-header" style={{ background: 'var(--paper)', color: 'var(--ink)', borderBottom: '1px solid var(--ink)', gap: '10px' }}>
-              <h2 style={{ flex: 1 }}>Simulated Performance Distribution</h2>
+            <div className="section-divider" style={{ marginTop: '-12px' }} />
+            <div className="input-label" style={{ marginTop: '-12px', marginBottom: '-8px' }}>PORTFOLIO CONSTRUCTION</div>
+
+            <SliderInput label="FOLLOW-ON RESERVE" value={config.dry_powder_reserve_for_pro_rata} onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)} min={0} max={70} step={5} unit="%" />
+
+            <div className="checkbox-row">
+              <input type="checkbox" id="reinvest" checked={config.reinvest_unused_reserve !== false} onChange={(e) => setField('reinvest_unused_reserve', e.target.checked)} />
+              <label htmlFor="reinvest" style={{ cursor: 'pointer' }}>Re-invest unused reserve</label>
+            </div>
+
+            <NumberInput label="PRO-RATA MAX VALUATION ($M)" value={config.pro_rata_max_valuation} onChange={(v) => setField('pro_rata_max_valuation', v)} min={0} max={10000} step={10} />
+
+            <StageAllocationTable stageAllocations={config.stage_allocations} onStageAllocationsChange={(v) => setField('stage_allocations', v)} />
+          </div>
+        );
+
+        const resultsPanel = (
+          <>
+            <div className="panel-header" style={{ background: 'var(--paper)', color: 'var(--ink)', borderBottom: '1px solid var(--ink)', gap: '10px', flexWrap: mobile ? 'wrap' : 'nowrap' }}>
+              {!mobile && <h2 style={{ flex: 1 }}>Simulated Performance Distribution</h2>}
               <span style={{ fontFamily: MONO, fontSize: '10px', color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Market Conditions</span>
               <select
                 value={marketScenario}
@@ -1767,9 +1795,49 @@ const App = () => {
                 </div>
               )}
             </div>
-          </main>
-        </div>
-      )}
+          </>
+        );
+
+        return mobile ? (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="entry-sub-tabs">
+              <button className={`entry-sub-tab ${entryPanel === 'strategy' ? 'active' : ''}`} onClick={() => setEntryPanel('strategy')}>Strategy</button>
+              <button className={`entry-sub-tab ${entryPanel === 'variables' ? 'active' : ''}`} onClick={() => setEntryPanel('variables')}>Variables</button>
+              <button className={`entry-sub-tab ${entryPanel === 'results' ? 'active' : ''}`} onClick={() => setEntryPanel('results')}>Results</button>
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {entryPanel === 'strategy' && <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>{strategyPanel}</div>}
+              {entryPanel === 'variables' && <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>{variablesPanel}</div>}
+              {entryPanel === 'results' && <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>{resultsPanel}</div>}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '320px 320px 1fr', flex: 1, overflow: 'hidden' }}>
+            {/* Panel 1: Strategy List */}
+            <aside className="panel">
+              <div className="panel-header">
+                <h2>1. Strategy</h2>
+                <span className="mono">SELECT</span>
+              </div>
+              {strategyPanel}
+            </aside>
+
+            {/* Panel 2: Variables */}
+            <aside className="panel" style={activeStrategyId == null ? { opacity: 0.35, pointerEvents: 'none' } : {}}>
+              <div className="panel-header">
+                <h2>2. Variables</h2>
+                <span className="mono">{activeStrategyId == null ? 'SELECT A STRATEGY' : 'INPUT'}</span>
+              </div>
+              {variablesPanel}
+            </aside>
+
+            {/* Panel 3: Single Strategy Results */}
+            <main className="panel" style={{ overflow: 'hidden' }}>
+              {resultsPanel}
+            </main>
+          </div>
+        );
+      })()}
 
       {/* ═══════════ STRATEGY COMPARISON TAB ═══════════ */}
       {activeTab === 'comparison' && (
@@ -1808,7 +1876,7 @@ const App = () => {
             return (
             <>
               {/* Strategy selector + controls — single row */}
-              <div style={{ display: 'flex', alignItems: 'center', padding: '8px 20px', gap: '8px', borderBottom: '1px solid var(--ink)', flexShrink: 0, overflowX: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: mobile ? '8px 12px' : '8px 20px', gap: '8px', borderBottom: '1px solid var(--ink)', flexShrink: 0, overflowX: 'auto', flexWrap: mobile ? 'wrap' : 'nowrap' }}>
                 {savedStrategies.map((strat, i) => {
                   const summary = summarizeConfig(strat.config);
                   const color = STRATEGY_COLORS[i % STRATEGY_COLORS.length];
@@ -1883,9 +1951,9 @@ const App = () => {
                 </div>
               )}
 
-              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '2fr 1fr', overflow: 'hidden' }}>
+              <div style={{ flex: 1, display: mobile ? 'flex' : 'grid', flexDirection: mobile ? 'column' : undefined, gridTemplateColumns: mobile ? undefined : '2fr 1fr', overflow: mobile ? 'auto' : 'hidden' }}>
                 {/* Dot Plot */}
-                <div style={{ borderRight: '1px solid var(--ink)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+                <div style={{ borderRight: mobile ? 'none' : '1px solid var(--ink)', borderBottom: mobile ? '1px solid var(--ink)' : 'none', display: 'flex', flexDirection: 'column', overflow: 'auto', minHeight: mobile ? '400px' : undefined }}>
                   <ComparisonDotPlot strategies={comparisonStrategies} />
                 </div>
 
@@ -1906,26 +1974,26 @@ const App = () => {
       {/* ═══════════ ABOUT & CONTACT TAB ═══════════ */}
       {activeTab === 'about' && (
         <div style={{ flex: 1, overflow: 'auto' }}>
-          <section style={{ maxWidth: '960px', margin: '0 auto', padding: '60px 40px' }}>
+          <section style={{ maxWidth: '960px', margin: '0 auto', padding: mobile ? '32px 16px' : '60px 40px' }}>
             <div style={{ marginBottom: '40px' }}>
               <AboutPortfolioGrid />
             </div>
 
             <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>About</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
               Monaco Fund Simulator
             </h2>
-            <p style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7 }}>
+            <p style={{ fontSize: mobile ? '15px' : '17.5px', color: '#666', lineHeight: 1.7 }}>
               Venture fund economics are fascinating, especially in this rapidly evolving early stage software market. We built this simulator as part of the research for our own early stage AI/ML fund, <a href="https://gradient.com" target="_blank" rel="noopener noreferrer" style={{ color: '#dc2626', fontWeight: 600 }}>Gradient</a>. <br/> <br/>If you want to chat about venture fund economics, feel free to reach out to me at clayton [at] gradient.com. You can find more details about me <a href="https://claytonpetty.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a> and <a href="https://www.linkedin.com/in/cdpetty/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>here</a>. <br/> <br/> A special thanks to my colleague Zach Bratun-Glennon at Gradient for problem solving this and <a href="https://www.linkedin.com/in/peterjameswalker/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Peter Walker</a> at <a href="https://carta.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Carta</a> for collaborating with us on the data that drives the underlying graduation rate and valuation assumptions.<br/> <br/> Happy investing!
             </p>
 
             <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
 
             <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Getting Started</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
               How to Use
             </h2>
-            <ol style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7, paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <ol style={{ fontSize: mobile ? '15px' : '17.5px', color: '#666', lineHeight: 1.7, paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <li>The simulator is best used by pre-seed, seed, and some select Series A funds (particularly those that do seed and A).</li>
               <li>The base market case is built on market data from <a href="https://carta.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Carta</a> (<a href="https://www.linkedin.com/posts/peterjameswalker_seed-to-series-a-graduation-rate-activity-7292256120423755777-bu8o?utm_source=share&utm_medium=member_desktop&rcm=ACoAABafbR8BDcy1wnDzXevSXgZAK-jqfPLKZVM" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>this post</a>) and other sources that document historical graduation rates of companies from stage to stage.</li>
               <li>You can tweak market assumptions if you are interested.</li>
@@ -1934,10 +2002,10 @@ const App = () => {
             <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
 
             <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Source Code</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '12px' }}>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '12px' }}>
               GitHub
             </h2>
-            <p style={{ fontSize: '17.5px', color: '#666', lineHeight: 1.7, marginBottom: '16px' }}>
+            <p style={{ fontSize: mobile ? '15px' : '17.5px', color: '#666', lineHeight: 1.7, marginBottom: '16px' }}>
               Monaco Fund Simulator is open source. However, please be kind as much of the actual data science work was done in Hex and then Claude did the hard (and at times, sloppy) work of building the app.
             </p>
             <a href="https://github.com/monaco-app" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '10px 20px', border: '1px solid var(--ink)', fontFamily: MONO, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink)', textDecoration: 'none', fontWeight: 600 }}>
@@ -1947,7 +2015,7 @@ const App = () => {
             <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
 
             <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Further Reading</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
+            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
               Other Great Writing About Fund Economics
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1957,7 +2025,7 @@ const App = () => {
                 { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
                 { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
               ].map((article, i) => (
-                <a key={i} href={article.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', border: '1px solid var(--ink)', textDecoration: 'none', color: 'var(--ink)', transition: 'background 0.15s' }}>
+                <a key={i} href={article.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: mobile ? 'flex-start' : 'center', padding: '14px', border: '1px solid var(--ink)', textDecoration: 'none', color: 'var(--ink)', transition: 'background 0.15s', gap: mobile ? '4px' : undefined }}>
                   <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '19px', fontWeight: 600 }}>{article.title}</span>
                   <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999' }}>{article.source}</span>
                 </a>
