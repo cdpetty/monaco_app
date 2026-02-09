@@ -108,6 +108,75 @@ function deepCloneConfig(cfg) {
 // ─── Saved strategies helpers ─────────────────────────────────────
 let nextStrategyId = 1;
 
+const DEFAULT_STRATEGIES = [
+  {
+    id: 1,
+    name: 'BOXGROUP',
+    code: 'A',
+    config: {
+      fund_size_m: 250,
+      management_fee_pct: 2,
+      fee_duration_years: 10,
+      recycled_capital_pct: 20,
+      dry_powder_reserve_for_pro_rata: 50,
+      reinvest_unused_reserve: true,
+      pro_rata_max_valuation: 500,
+      stage_allocations: {
+        'Pre-seed': { pct: 50, check_size: 0.75 },
+        'Seed':     { pct: 50, check_size: 0.75 },
+        'Series A': { pct: 0,  check_size: 5.0 },
+        'Series B': { pct: 0,  check_size: 10.0 },
+      },
+    },
+    results: null,
+    stale: false,
+  },
+  {
+    id: 2,
+    name: 'GRADIENT',
+    code: 'B',
+    config: {
+      fund_size_m: 150,
+      management_fee_pct: 2,
+      fee_duration_years: 10,
+      recycled_capital_pct: 20,
+      dry_powder_reserve_for_pro_rata: 30,
+      reinvest_unused_reserve: true,
+      pro_rata_max_valuation: 500,
+      stage_allocations: {
+        'Pre-seed': { pct: 50, check_size: 1.75 },
+        'Seed':     { pct: 50, check_size: 3.5 },
+        'Series A': { pct: 0,  check_size: 5.0 },
+        'Series B': { pct: 0,  check_size: 10.0 },
+      },
+    },
+    results: null,
+    stale: false,
+  },
+  {
+    id: 3,
+    name: 'RADICAL VENTURES',
+    code: 'C',
+    config: {
+      fund_size_m: 400,
+      management_fee_pct: 2,
+      fee_duration_years: 10,
+      recycled_capital_pct: 20,
+      dry_powder_reserve_for_pro_rata: 40,
+      reinvest_unused_reserve: true,
+      pro_rata_max_valuation: 500,
+      stage_allocations: {
+        'Pre-seed': { pct: 0,  check_size: 1.5 },
+        'Seed':     { pct: 50, check_size: 4.5 },
+        'Series A': { pct: 50, check_size: 10.5 },
+        'Series B': { pct: 0,  check_size: 10.0 },
+      },
+    },
+    results: null,
+    stale: false,
+  },
+];
+
 function loadSavedStrategies() {
   try {
     const raw = localStorage.getItem('monaco_saved_strategies');
@@ -119,7 +188,8 @@ function loadSavedStrategies() {
       }
     }
   } catch (e) {}
-  return [];
+  nextStrategyId = 4;
+  return DEFAULT_STRATEGIES.map((s) => ({ ...s }));
 }
 
 function persistStrategies(strategies) {
