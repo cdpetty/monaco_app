@@ -132,7 +132,7 @@ let nextStrategyId = 1;
 const DEFAULT_STRATEGIES = [
   {
     id: 1,
-    name: 'BOXGROUP',
+    name: 'LARGE FOLLOW-ON FUND',
     code: 'A',
     config: {
       fund_size_m: 250,
@@ -152,7 +152,7 @@ const DEFAULT_STRATEGIES = [
   },
   {
     id: 2,
-    name: 'GRADIENT',
+    name: 'STANDARD SEED LEAD FUND',
     code: 'B',
     config: {
       fund_size_m: 150,
@@ -172,7 +172,7 @@ const DEFAULT_STRATEGIES = [
   },
   {
     id: 3,
-    name: 'RADICAL VENTURES',
+    name: 'SEED & SERIES A LEAD FUND',
     code: 'C',
     config: {
       fund_size_m: 400,
@@ -1891,6 +1891,8 @@ const App = () => {
             <div className="section-divider" style={{ marginTop: '-12px' }} />
             <div className="input-label" style={{ marginTop: '-12px', marginBottom: '-8px' }}>PORTFOLIO CONSTRUCTION</div>
 
+            <StageAllocationTable stageAllocations={config.stage_allocations} onStageAllocationsChange={(v) => setField('stage_allocations', v)} />
+
             <SliderInput label="FOLLOW-ON RESERVE" value={config.dry_powder_reserve_for_pro_rata} onChange={(v) => setField('dry_powder_reserve_for_pro_rata', v)} min={0} max={70} step={5} unit="%" />
 
             <div className="checkbox-row">
@@ -1899,8 +1901,6 @@ const App = () => {
             </div>
 
             <NumberInput label="PRO-RATA MAX VALUATION ($M)" value={config.pro_rata_max_valuation} onChange={(v) => setField('pro_rata_max_valuation', v)} min={0} max={10000} step={10} />
-
-            <StageAllocationTable stageAllocations={config.stage_allocations} onStageAllocationsChange={(v) => setField('stage_allocations', v)} />
           </div>
         );
 
@@ -1927,13 +1927,10 @@ const App = () => {
               >
                 {loading ? 'RUNNING...' : !allocationValid ? `ALLOCATION ≠ 100% (${allocationTotal}%)` : 'RUN SIMULATION'}
               </button>
-              {activeStrategyId != null && (
+              {savedStrategies.length > 0 && (
                 <button
                   className="btn"
-                  onClick={() => {
-                    const active = savedStrategies.find((s) => s.id === activeStrategyId);
-                    if (active) shareStrategies([active]);
-                  }}
+                  onClick={() => shareStrategies(savedStrategies)}
                   style={{ width: 'auto', padding: '6px 16px', fontSize: '12px', background: 'none', color: 'var(--ink)', border: '1px solid var(--ink)' }}
                 >
                   {shareCopied ? 'COPIED!' : 'SHARE'}
