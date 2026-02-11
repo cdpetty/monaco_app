@@ -27,28 +27,32 @@ const DEFAULT_CONFIG = {
   dry_powder_reserve_for_pro_rata: 40,
   reinvest_unused_reserve: true,
   pro_rata_max_valuation: 500,
-  stage_allocations: {
-    'Pre-seed': { pct: 25, check_size: 1.5 },
-    'Seed':     { pct: 25, check_size: 2.0 },
-    'Series A': { pct: 50, check_size: 5.0 },
-    'Series B': { pct: 0,  check_size: 10.0 },
-  },
+  stage_allocations: [
+    { stage: 'Pre-seed', pct: 25, check_size: 1.5 },
+    { stage: 'Seed',     pct: 25, check_size: 2.0 },
+    { stage: 'Series A', pct: 50, check_size: 5.0 },
+  ],
 };
 const MAX_STRATEGIES = 6;
 
 function migrateConfig(config) {
-  if (config.stage_allocations) return config;
+  // Already in new array format
+  if (Array.isArray(config.stage_allocations)) return config;
+  // Old object format — convert to array (keep only active rows)
+  if (config.stage_allocations && typeof config.stage_allocations === 'object') {
+    const rows = [];
+    for (const [stage, alloc] of Object.entries(config.stage_allocations)) {
+      if (alloc.pct > 0) rows.push({ stage, pct: alloc.pct, check_size: alloc.check_size });
+    }
+    return { ...config, stage_allocations: rows.length > 0 ? rows : [{ stage: 'Pre-seed', pct: 100, check_size: 1.5 }] };
+  }
+  // Legacy preseed_pct format
   const { preseed_pct, preseed_check_size, seed_check_size, ...rest } = config;
   const pp = preseed_pct ?? 100;
-  return {
-    ...rest,
-    stage_allocations: {
-      'Pre-seed': { pct: pp, check_size: preseed_check_size ?? 1.5 },
-      'Seed':     { pct: 100 - pp, check_size: seed_check_size ?? 2.0 },
-      'Series A': { pct: 0, check_size: 5.0 },
-      'Series B': { pct: 0, check_size: 10.0 },
-    },
-  };
+  const rows = [];
+  if (pp > 0) rows.push({ stage: 'Pre-seed', pct: pp, check_size: preseed_check_size ?? 1.5 });
+  if (100 - pp > 0) rows.push({ stage: 'Seed', pct: 100 - pp, check_size: seed_check_size ?? 2.0 });
+  return { ...rest, stage_allocations: rows.length > 0 ? rows : [{ stage: 'Pre-seed', pct: 100, check_size: 1.5 }] };
 }
 
 const STRATEGY_COLORS = [
@@ -59,6 +63,24 @@ const STRATEGY_COLORS = [
   { main: '#9333ea', dim: 'rgba(147,51,234,0.4)', bg: 'rgba(147,51,234,0.08)' },
   { main: '#0891b2', dim: 'rgba(8,145,178,0.4)', bg: 'rgba(8,145,178,0.08)' },
 ];
+
+// ─── Share URL Helpers ────────────────────────────────────────────
+function encodeShareData(data) {
+  return btoa(encodeURIComponent(JSON.stringify(data)));
+}
+
+function decodeShareData(encoded) {
+  return JSON.parse(decodeURIComponent(atob(encoded)));
+}
+
+function getShareParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get('s');
+    if (s) return decodeShareData(s);
+  } catch (e) {}
+  return null;
+}
 
 // ─── Utilities ────────────────────────────────────────────────────
 function computeP95(distribution) {
@@ -96,9 +118,8 @@ function buildHistogram(distribution, numBins = 24) {
 }
 
 function deepCloneAllocations(allocs) {
-  const out = {};
-  for (const [k, v] of Object.entries(allocs || {})) out[k] = { ...v };
-  return out;
+  if (!allocs) return [];
+  return allocs.map((row) => ({ ...row }));
 }
 
 function deepCloneConfig(cfg) {
@@ -121,12 +142,10 @@ const DEFAULT_STRATEGIES = [
       dry_powder_reserve_for_pro_rata: 50,
       reinvest_unused_reserve: true,
       pro_rata_max_valuation: 500,
-      stage_allocations: {
-        'Pre-seed': { pct: 50, check_size: 0.75 },
-        'Seed':     { pct: 50, check_size: 0.75 },
-        'Series A': { pct: 0,  check_size: 5.0 },
-        'Series B': { pct: 0,  check_size: 10.0 },
-      },
+      stage_allocations: [
+        { stage: 'Pre-seed', pct: 50, check_size: 0.75 },
+        { stage: 'Seed',     pct: 50, check_size: 0.75 },
+      ],
     },
     results: null,
     stale: false,
@@ -143,12 +162,10 @@ const DEFAULT_STRATEGIES = [
       dry_powder_reserve_for_pro_rata: 30,
       reinvest_unused_reserve: true,
       pro_rata_max_valuation: 500,
-      stage_allocations: {
-        'Pre-seed': { pct: 50, check_size: 1.75 },
-        'Seed':     { pct: 50, check_size: 3.5 },
-        'Series A': { pct: 0,  check_size: 5.0 },
-        'Series B': { pct: 0,  check_size: 10.0 },
-      },
+      stage_allocations: [
+        { stage: 'Pre-seed', pct: 50, check_size: 1.75 },
+        { stage: 'Seed',     pct: 50, check_size: 3.5 },
+      ],
     },
     results: null,
     stale: false,
@@ -165,12 +182,10 @@ const DEFAULT_STRATEGIES = [
       dry_powder_reserve_for_pro_rata: 40,
       reinvest_unused_reserve: true,
       pro_rata_max_valuation: 500,
-      stage_allocations: {
-        'Pre-seed': { pct: 0,  check_size: 1.5 },
-        'Seed':     { pct: 50, check_size: 4.5 },
-        'Series A': { pct: 50, check_size: 10.5 },
-        'Series B': { pct: 0,  check_size: 10.0 },
-      },
+      stage_allocations: [
+        { stage: 'Seed',     pct: 50, check_size: 4.5 },
+        { stage: 'Series A', pct: 50, check_size: 10.5 },
+      ],
     },
     results: null,
     stale: false,
@@ -178,6 +193,22 @@ const DEFAULT_STRATEGIES = [
 ];
 
 function loadSavedStrategies() {
+  // Check for shared URL first
+  const shared = getShareParam();
+  if (shared && Array.isArray(shared.strategies) && shared.strategies.length > 0) {
+    const strategies = shared.strategies.map((s, i) => ({
+      id: i + 1,
+      name: s.name || `STRATEGY ${strategyCode(i)}`,
+      code: strategyCode(i),
+      config: migrateConfig(s.config),
+      results: null,
+      stale: false,
+    }));
+    nextStrategyId = strategies.length + 1;
+    // Clean up URL
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    return strategies;
+  }
   try {
     const raw = localStorage.getItem('monaco_saved_strategies');
     if (raw) {
@@ -201,10 +232,11 @@ function strategyCode(index) {
 }
 
 function summarizeConfig(config) {
-  const activeStages = ENTRY_STAGES.filter((s) => (config.stage_allocations?.[s]?.pct || 0) > 0);
-  const checks = activeStages.map((s) => `$${config.stage_allocations[s].check_size}M`);
+  const rows = config.stage_allocations || [];
   const stageAbbrevs = { 'Pre-seed': 'PS', 'Seed': 'S', 'Series A': 'A', 'Series B': 'B' };
-  const stages = activeStages.map((s) => stageAbbrevs[s] || s).join(', ');
+  const checks = rows.map((r) => `$${r.check_size}M`);
+  const uniqueStages = [...new Set(rows.map((r) => r.stage))];
+  const stages = uniqueStages.map((s) => stageAbbrevs[s] || s).join(', ');
   return {
     checkSize: checks.length > 0 ? checks.join(' – ') : '—',
     reserves: `${config.dry_powder_reserve_for_pro_rata || 0}%`,
@@ -219,11 +251,19 @@ function buildSimPayload(config, marketScenario, numIterations) {
   const checkSizes = {};
   const ownershipPcts = {};
   const allocationPcts = {};
-  for (const [stage, alloc] of Object.entries(stage_allocations || {})) {
-    if (alloc.pct > 0) {
-      checkSizes[stage] = alloc.check_size;
-      ownershipPcts[stage] = alloc.check_size / (valuations[stage] || 1);
-      allocationPcts[stage] = alloc.pct;
+  // Merge rows with the same stage: sum pct, weighted-average check_size
+  const merged = {};
+  for (const row of (stage_allocations || [])) {
+    if (!merged[row.stage]) merged[row.stage] = { pct: 0, weightedCheck: 0 };
+    merged[row.stage].pct += row.pct;
+    merged[row.stage].weightedCheck += row.pct * row.check_size;
+  }
+  for (const [stage, m] of Object.entries(merged)) {
+    if (m.pct > 0) {
+      const avgCheck = m.weightedCheck / m.pct;
+      checkSizes[stage] = avgCheck;
+      ownershipPcts[stage] = avgCheck / (valuations[stage] || 1);
+      allocationPcts[stage] = m.pct;
     }
   }
   const cfg = {
@@ -379,15 +419,26 @@ const StatBox = ({ value, label }) => (
 );
 
 // ─── Stage Allocation Table ───────────────────────────────────────
-const StageAllocationTable = ({ stageAllocations, onStageAllocationsChange }) => {
-  const valuations = getStageValuations();
-  const totalPct = ENTRY_STAGES.reduce((sum, s) => sum + (stageAllocations[s]?.pct || 0), 0);
+const MAX_ALLOC_ROWS = 8;
 
-  const updateStage = (stage, field, value) => {
-    const updated = {};
-    for (const s of ENTRY_STAGES) updated[s] = { ...(stageAllocations[s] || { pct: 0, check_size: 1 }) };
-    updated[stage] = { ...updated[stage], [field]: value };
+const StageAllocationTable = ({ stageAllocations, onStageAllocationsChange }) => {
+  const rows = stageAllocations || [];
+  const valuations = getStageValuations();
+  const totalPct = rows.reduce((sum, r) => sum + (r.pct || 0), 0);
+
+  const updateRow = (index, field, value) => {
+    const updated = rows.map((r, i) => (i === index ? { ...r, [field]: value } : { ...r }));
     onStageAllocationsChange(updated);
+  };
+
+  const addRow = () => {
+    if (rows.length >= MAX_ALLOC_ROWS) return;
+    onStageAllocationsChange([...rows.map((r) => ({ ...r })), { stage: ENTRY_STAGES[0], pct: 0, check_size: 1.0 }]);
+  };
+
+  const removeRow = (index) => {
+    if (rows.length <= 1) return;
+    onStageAllocationsChange(rows.filter((_, i) => i !== index).map((r) => ({ ...r })));
   };
 
   const thStyle = { textAlign: 'right', padding: '3px 2px', fontSize: '9px', fontWeight: 600, color: '#666', whiteSpace: 'nowrap' };
@@ -410,35 +461,57 @@ const StageAllocationTable = ({ stageAllocations, onStageAllocationsChange }) =>
             <th style={thStyle}>CHECK</th>
             <th style={thStyle}>OWN</th>
             <th style={thStyle}>VAL</th>
+            <th style={{ ...thStyle, width: '20px' }}></th>
           </tr>
         </thead>
         <tbody>
-          {ENTRY_STAGES.map((stage) => {
-            const alloc = stageAllocations[stage] || { pct: 0, check_size: 1 };
-            const val = valuations[stage] || 1;
-            const ownership = ((alloc.check_size / val) * 100).toFixed(1);
-            const isActive = alloc.pct > 0;
+          {rows.map((row, idx) => {
+            const val = valuations[row.stage] || 1;
+            const ownership = ((row.check_size / val) * 100).toFixed(1);
             return (
-              <tr key={stage} style={{ opacity: isActive ? 1 : 0.35, borderBottom: '1px solid var(--trace)' }}>
-                <td style={{ padding: '3px 0', fontSize: '10px' }}>{stage}</td>
+              <tr key={idx} style={{ borderBottom: '1px solid var(--trace)' }}>
+                <td style={{ padding: '3px 0', fontSize: '10px' }}>
+                  <select value={row.stage}
+                    onChange={(e) => updateRow(idx, 'stage', e.target.value)}
+                    className="input-field compact"
+                    style={{ width: '100%', padding: '3px 2px', fontSize: '10px', background: 'var(--paper)', cursor: 'pointer' }}>
+                    {ENTRY_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </td>
                 <td style={tdStyle}>
-                  <input type="number" value={alloc.pct} min={0} max={100} step={5}
-                    onChange={(e) => updateStage(stage, 'pct', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                  <input type="number" value={row.pct} min={0} max={100} step={5}
+                    onChange={(e) => updateRow(idx, 'pct', Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     className="input-field compact" style={{ width: '40px', textAlign: 'right', padding: '3px 4px', fontSize: '11px' }} />
                 </td>
                 <td style={tdStyle}>
-                  <input type="number" value={alloc.check_size} min={0.1} max={50} step={0.25}
-                    disabled={!isActive}
-                    onChange={(e) => updateStage(stage, 'check_size', parseFloat(e.target.value) || 0.1)}
+                  <input type="number" value={row.check_size} min={0.1} max={50} step={0.25}
+                    onChange={(e) => updateRow(idx, 'check_size', parseFloat(e.target.value) || 0.1)}
                     className="input-field compact" style={{ width: '48px', textAlign: 'right', padding: '3px 4px', fontSize: '11px' }} />
                 </td>
-                <td style={readonlyTd}>{isActive ? `${ownership}%` : '—'}</td>
-                <td style={readonlyTd}>{isActive ? `$${val}` : '—'}</td>
+                <td style={readonlyTd}>{`${ownership}%`}</td>
+                <td style={readonlyTd}>{`$${val}`}</td>
+                <td style={{ padding: '3px 2px', textAlign: 'center' }}>
+                  {rows.length > 1 && (
+                    <span onClick={() => removeRow(idx)}
+                      style={{ cursor: 'pointer', opacity: 0.4, fontSize: '14px', lineHeight: 1 }}
+                      onMouseEnter={(e) => e.target.style.opacity = 1}
+                      onMouseLeave={(e) => e.target.style.opacity = 0.4}>
+                      &times;
+                    </span>
+                  )}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {rows.length < MAX_ALLOC_ROWS && (
+        <button onClick={addRow}
+          style={{ background: 'rgba(34,197,94,0.08)', border: '1px dashed rgba(34,197,94,0.5)', padding: '6px 8px', cursor: 'pointer',
+            fontFamily: MONO, fontSize: '11px', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>
+          + Add Row
+        </button>
+      )}
     </div>
   );
 };
@@ -838,7 +911,7 @@ const ComparisonDotPlot = ({ strategies }) => {
       if (!s.results) return null;
       const r = s.results;
       const p95 = computeP95(r.moic_distribution);
-      const activeStages = ENTRY_STAGES.filter((st) => (s.config.stage_allocations?.[st]?.pct || 0) > 0);
+      const activeStages = [...new Set((s.config.stage_allocations || []).map((r) => r.stage))];
       const ci = s._colorIndex != null ? s._colorIndex : i;
       return {
         id: s.id, name: s.name, code: s.code,
@@ -1106,9 +1179,13 @@ const App = () => {
 
   // ── Global State ──
   const [marketScenario, setMarketScenario] = useState(() => {
+    const shared = getShareParam();
+    if (shared?.marketScenario) return shared.marketScenario;
     try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.marketScenario || 'MARKET'; } catch (e) { return 'MARKET'; }
   });
   const [numIterations, setNumIterations] = useState(() => {
+    const shared = getShareParam();
+    if (shared?.numIterations) return shared.numIterations;
     try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.numIterations || 5000; } catch (e) { return 5000; }
   });
 
@@ -1290,7 +1367,7 @@ const App = () => {
 
   // ── Run Simulation (single strategy) ──
   const runSimulation = useCallback(async () => {
-    const total = ENTRY_STAGES.reduce((sum, s) => sum + (config.stage_allocations?.[s]?.pct || 0), 0);
+    const total = (config.stage_allocations || []).reduce((sum, r) => sum + (r.pct || 0), 0);
     if (total !== 100) return;
     setLoading(true);
     setError(null);
@@ -1369,12 +1446,29 @@ const App = () => {
     }
   }, [activeTab, savedStrategies, runAllSimulations]);
 
+  // ── Share ──
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const shareStrategies = useCallback((strategiesToShare) => {
+    const data = {
+      strategies: strategiesToShare.map((s) => ({ name: s.name, config: s.config })),
+      marketScenario,
+      numIterations,
+    };
+    const encoded = encodeShareData(data);
+    const url = `${window.location.origin}${window.location.pathname}?s=${encoded}${window.location.hash}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    });
+  }, [marketScenario, numIterations]);
+
   // ── Deployed capital calc ──
   const fs = config.fund_size_m || 0;
   const fees = fs * ((config.management_fee_pct ?? 2) / 100) * 10;
   const recycled = fs * ((config.recycled_capital_pct ?? 20) / 100);
   const deployed = fs - fees + recycled;
-  const allocationTotal = ENTRY_STAGES.reduce((sum, s) => sum + (config.stage_allocations?.[s]?.pct || 0), 0);
+  const allocationTotal = (config.stage_allocations || []).reduce((sum, r) => sum + (r.pct || 0), 0);
   const allocationValid = allocationTotal === 100;
 
   // ── Stats for current result ──
@@ -1833,6 +1927,18 @@ const App = () => {
               >
                 {loading ? 'RUNNING...' : !allocationValid ? `ALLOCATION ≠ 100% (${allocationTotal}%)` : 'RUN SIMULATION'}
               </button>
+              {activeStrategyId != null && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const active = savedStrategies.find((s) => s.id === activeStrategyId);
+                    if (active) shareStrategies([active]);
+                  }}
+                  style={{ width: 'auto', padding: '6px 16px', fontSize: '12px', background: 'none', color: 'var(--ink)', border: '1px solid var(--ink)' }}
+                >
+                  {shareCopied ? 'COPIED!' : 'SHARE'}
+                </button>
+              )}
             </div>
 
             {loading && (
@@ -2013,6 +2119,15 @@ const App = () => {
                 >
                   {comparisonLoading ? 'RUNNING...' : 'RUN ALL SIMULATIONS'}
                 </button>
+                {savedStrategies.length > 0 && (
+                  <button
+                    className="btn"
+                    onClick={() => shareStrategies(savedStrategies)}
+                    style={{ width: 'auto', padding: '6px 16px', fontSize: '12px', background: 'none', color: 'var(--ink)', border: '1px solid var(--ink)', whiteSpace: 'nowrap' }}
+                  >
+                    {shareCopied ? 'COPIED!' : 'SHARE ALL'}
+                  </button>
+                )}
               </div>
 
               {comparisonLoading && (
