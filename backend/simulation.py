@@ -136,8 +136,11 @@ class Experiment:
             # Calculate total primary investment
             total_primary_investment = sum(config['primary_investments'].values())
 
-            # Validate primary investments and follow-on reserve
-            if total_primary_investment + config['follow_on_reserve'] != config['fund_size']:
+            # Validate primary investments and follow-on reserve.
+            # Use a tolerance, not strict equality: allocations like 34/33/33 introduce
+            # floating-point error (e.g. 200.00000000000003 != 200) that must not reject
+            # an otherwise-valid configuration.
+            if abs(total_primary_investment + config['follow_on_reserve'] - config['fund_size']) > 1e-6:
                 print('Error: Total primary investment plus follow-on reserve does not equal fund size')
                 print(f"Details: follow_on_reserve={config['follow_on_reserve']}, "
                       f"total_primary_investment={total_primary_investment}, "

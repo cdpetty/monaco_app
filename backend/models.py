@@ -773,7 +773,7 @@ class Montecarlo_Sim_Configuration:
 
         # Validate total
         total_plan_to_invest = sum(self.primary_investments.values()) + self.follow_on_reserve
-        if total_plan_to_invest != self.fund_size:
+        if abs(total_plan_to_invest - self.fund_size) > 1e-6:
             print('Error: Total primary investment plus follow-on reserve does not equal fund size')
 
     def __repr__(self) -> str:
