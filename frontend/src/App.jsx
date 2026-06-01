@@ -208,11 +208,13 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
 });
 
 const PRESETS = {
+  // $30M: pre-seed, vary entry ownership (2.5/5/10%) x reserve (20/50%).
   '30m': [
-    { name: 'PRE-SEED FOCUSED',     config: presetCfg(30, 20, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 1.0 }]) },
-    { name: 'SEED FOCUSED',         config: presetCfg(30, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 1.5 }]) },
-    { name: 'CONCENTRATED SEED',    config: presetCfg(30, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 6.0 }]) },
-    { name: 'SERIES A ENTRY',       config: presetCfg(30, 20, 500, [{ stage: 'Series A', pct: 100, check_size: 3.0 }]) },
+    { name: 'PRE-SEED · 2.5% OWN · 20% RESERVE', config: presetCfg(30, 20, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 0.375 }]) },
+    { name: 'PRE-SEED · 2.5% OWN · 50% RESERVE', config: presetCfg(30, 50, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 0.375 }]) },
+    { name: 'PRE-SEED · 5% OWN',                 config: presetCfg(30, 20, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 0.75 }]) },
+    { name: 'PRE-SEED · 10% OWN · 20% RESERVE',  config: presetCfg(30, 20, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 1.5 }]) },
+    { name: 'PRE-SEED · 10% OWN · 50% RESERVE',  config: presetCfg(30, 50, 500, [{ stage: 'Pre-seed', pct: 100, check_size: 1.5 }]) },
   ],
   '100m': [
     { name: 'SEED FOCUSED',          config: presetCfg(100, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 2.0 }]) },
@@ -221,19 +223,20 @@ const PRESETS = {
     { name: 'CONCENTRATED SERIES A', config: presetCfg(100, 20, 500, [{ stage: 'Series A', pct: 100, check_size: 14.0 }]) },
     { name: 'HEAVY RESERVES',        config: presetCfg(100, 40, 500, [{ stage: 'Seed', pct: 100, check_size: 2.0 }]) },
   ],
+  // $200M: lead (15% own) vs follow (5% own); seed-lead split 30/50 reserve.
   '200m': [
-    { name: 'SEED FOCUSED',          config: presetCfg(200, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 3.0 }]) },
-    { name: 'SEED / SERIES A BLEND', config: presetCfg(200, 20, 500, [{ stage: 'Seed', pct: 50, check_size: 4.0 }, { stage: 'Series A', pct: 50, check_size: 9.0 }]) },
-    { name: 'SERIES A FOCUSED',      config: presetCfg(200, 20, 500, [{ stage: 'Series A', pct: 100, check_size: 12.0 }]) },
-    { name: 'SERIES B ENTRY',        config: presetCfg(200, 20, 750, [{ stage: 'Series B', pct: 100, check_size: 30.0 }]) },
-    { name: 'MULTI-STAGE',           config: presetCfg(200, 20, 750, [{ stage: 'Seed', pct: 34, check_size: 3.0 }, { stage: 'Series A', pct: 33, check_size: 10.0 }, { stage: 'Series B', pct: 33, check_size: 30.0 }]) },
+    { name: 'SEED LEAD · 30% FOLLOW-ON', config: presetCfg(200, 30, 500, [{ stage: 'Seed', pct: 100, check_size: 4.5 }]) },
+    { name: 'SEED LEAD · 50% FOLLOW-ON', config: presetCfg(200, 50, 500, [{ stage: 'Seed', pct: 100, check_size: 4.5 }]) },
+    { name: 'SEED + SERIES A LEAD',      config: presetCfg(200, 30, 500, [{ stage: 'Seed', pct: 50, check_size: 4.5 }, { stage: 'Series A', pct: 50, check_size: 10.5 }]) },
+    { name: 'FOLLOW-ON ONLY · 5% OWN',   config: presetCfg(200, 70, 500, [{ stage: 'Seed', pct: 100, check_size: 1.5 }]) },
+    { name: 'SEED FOLLOW · 5% OWN',      config: presetCfg(200, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 1.5 }]) },
   ],
+  // $400M: seed + series A vs all series A; each split 30/50 reserve (lead = 15% own).
   '400m': [
-    { name: 'SEED MICRO-CHECKS',      config: presetCfg(400, 20, 500, [{ stage: 'Seed', pct: 100, check_size: 3.0 }]) },
-    { name: 'SEED / SERIES A',        config: presetCfg(400, 20, 500, [{ stage: 'Seed', pct: 50, check_size: 5.0 }, { stage: 'Series A', pct: 50, check_size: 12.0 }]) },
-    { name: 'SERIES A / SERIES B',    config: presetCfg(400, 20, 750, [{ stage: 'Series A', pct: 50, check_size: 12.0 }, { stage: 'Series B', pct: 50, check_size: 35.0 }]) },
-    { name: 'CONCENTRATED SERIES B',  config: presetCfg(400, 20, 750, [{ stage: 'Series B', pct: 100, check_size: 40.0 }]) },
-    { name: 'LATER-STAGE (SERIES C)', config: presetCfg(400, 20, 750, [{ stage: 'Series C', pct: 100, check_size: 80.0 }]) },
+    { name: 'SEED + SERIES A · 30% FOLLOW-ON', config: presetCfg(400, 30, 500, [{ stage: 'Seed', pct: 50, check_size: 4.5 }, { stage: 'Series A', pct: 50, check_size: 10.5 }]) },
+    { name: 'SEED + SERIES A · 50% FOLLOW-ON', config: presetCfg(400, 50, 500, [{ stage: 'Seed', pct: 50, check_size: 4.5 }, { stage: 'Series A', pct: 50, check_size: 10.5 }]) },
+    { name: 'ALL SERIES A · 30% FOLLOW-ON',    config: presetCfg(400, 30, 500, [{ stage: 'Series A', pct: 100, check_size: 10.5 }]) },
+    { name: 'ALL SERIES A · 50% FOLLOW-ON',    config: presetCfg(400, 50, 500, [{ stage: 'Series A', pct: 100, check_size: 10.5 }]) },
   ],
 };
 
