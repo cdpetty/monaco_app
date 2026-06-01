@@ -1003,6 +1003,7 @@ const ComparisonDotPlot = ({ strategies }) => {
         fundSize: `$${s.config.fund_size_m || 0}M`,
         stages: activeStages.map((st) => stageAbbrevs[st] || st).join(', ') || '—',
         entryOwn: r.results.avg_entry_ownership != null ? `${r.results.avg_entry_ownership.toFixed(1)}%` : '—',
+        reserve: `${s.config.dry_powder_reserve_for_pro_rata ?? 0}%`,
         portfolioSize: r.results.avg_total_companies != null ? `${r.results.avg_total_companies.toFixed(0)}` : '—',
       };
     })
@@ -1029,7 +1030,7 @@ const ComparisonDotPlot = ({ strategies }) => {
 
   // Layout below the plot: wrapped name block, then the details rows.
   const NAME_BLOCK_TOP = 16;          // gap from chart bottom to first name line
-  const DETAIL_ROWS = 4;
+  const DETAIL_ROWS = 5;
   const DETAIL_LINE_H = 13;
   const detailsTop = NAME_BLOCK_TOP + maxNameLines * NAME_LINE_H + 12; // offset below chartBottom
   const BOTTOM_LABEL = detailsTop + DETAIL_ROWS * DETAIL_LINE_H + 16;
@@ -1119,7 +1120,7 @@ const ComparisonDotPlot = ({ strategies }) => {
                           fill={p.filled ? dotColor : 'var(--paper)'} stroke={dotColor} strokeWidth={p.filled ? 0 : 1.5} />
                         <text x={cx + 10} y={y + 3} fill={dotColor} fontFamily={MONO} fontSize="8"
                           fontWeight={p.filled ? '700' : '400'} textAnchor="start">
-                          {val.toFixed(2)}x
+                          {val.toFixed(1)}x
                         </text>
                         {/* Invisible larger hit area for hover */}
                         <circle cx={cx} cy={y} r={12} fill="transparent" style={{ cursor: 'pointer' }}
@@ -1140,6 +1141,7 @@ const ComparisonDotPlot = ({ strategies }) => {
                 { label: 'Fund Size', get: (s) => s.fundSize },
                 { label: 'Stages', get: (s) => s.stages },
                 { label: 'Entry Ownership', get: (s) => s.entryOwn },
+                { label: 'Follow-On Reserve', get: (s) => s.reserve },
                 { label: '# of Portcos', get: (s) => s.portfolioSize },
               ];
               const baseY = chartBottom + detailsTop;
