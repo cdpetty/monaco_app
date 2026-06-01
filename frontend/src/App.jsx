@@ -2160,9 +2160,12 @@ const App = () => {
             </div>
           ) : (() => {
             const selectedIds = comparisonSelected || savedStrategies.map((s) => s.id);
+            // Sort the displayed comparison by p75 MOIC (highest first). _colorIndex is
+            // assigned from the original order first, so each strategy keeps its color.
             const comparisonStrategies = savedStrategies
               .map((s, i) => ({ ...s, _colorIndex: i }))
-              .filter((s) => selectedIds.includes(s.id));
+              .filter((s) => selectedIds.includes(s.id))
+              .sort((a, b) => (b.results?.results?.p75_moic ?? -Infinity) - (a.results?.results?.p75_moic ?? -Infinity));
             const allSelected = comparisonSelected === null;
             const toggleStrategy = (id) => {
               if (comparisonSelected === null) {
