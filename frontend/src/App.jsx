@@ -901,6 +901,27 @@ const PERCENTILE_TO_BREAKDOWN = {
   p25_moic: 'p25', median_moic: 'p50', p75_moic: 'p75', p90_moic: 'p90', p95_moic: 'p95',
 };
 
+// Greedy word-wrap for SVG labels: split into lines no longer than maxChars,
+// hard-breaking any single word that is itself too long.
+function wrapLabel(text, maxChars) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    let word = w;
+    while (word.length > maxChars) {
+      if (cur) { lines.push(cur); cur = ''; }
+      lines.push(word.slice(0, maxChars));
+      word = word.slice(maxChars);
+    }
+    if (!cur) cur = word;
+    else if ((cur + ' ' + word).length <= maxChars) cur += ' ' + word;
+    else { lines.push(cur); cur = word; }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
 const ComparisonDotPlot = ({ strategies }) => {
   const [tooltip, setTooltip] = useState(null);
 
@@ -933,16 +954,29 @@ const ComparisonDotPlot = ({ strategies }) => {
   const { ticks, axisMax } = generateTicks(allMax * 1.1);
 
   const VW = 700;
-  const VH = 500;
   const LEFT_PAD = 100;
   const RIGHT_PAD = 30;
   const TOP_PAD = 40;
-  const BOTTOM_LABEL = 100;
   const LEGEND_H = 24;
   const chartTop = TOP_PAD + LEGEND_H;
-  const chartBottom = VH - BOTTOM_LABEL;
-  const chartH = chartBottom - chartTop;
   const colWidth = withResults.length > 0 ? (VW - LEFT_PAD - RIGHT_PAD) / withResults.length : VW;
+
+  // Wrap long strategy names so they stay inside their column instead of bleeding together.
+  const NAME_FS = 10;
+  const NAME_LINE_H = 12;
+  const nameCharsPerLine = Math.max(8, Math.floor((colWidth - 12) / (NAME_FS * 0.62)));
+  const wrappedNames = withResults.map((s) => wrapLabel(s.name, nameCharsPerLine));
+  const maxNameLines = Math.max(1, ...wrappedNames.map((w) => w.length));
+
+  // Layout below the plot: wrapped name block, then the details rows.
+  const NAME_BLOCK_TOP = 16;          // gap from chart bottom to first name line
+  const DETAIL_ROWS = 4;
+  const DETAIL_LINE_H = 13;
+  const detailsTop = NAME_BLOCK_TOP + maxNameLines * NAME_LINE_H + 12; // offset below chartBottom
+  const BOTTOM_LABEL = detailsTop + DETAIL_ROWS * DETAIL_LINE_H + 16;
+  const chartH = 336;
+  const chartBottom = chartTop + chartH;
+  const VH = chartBottom + BOTTOM_LABEL;
   const toY = (val) => chartBottom - (chartH * val) / axisMax;
 
   const handleDotEnter = (e, strat, pKey) => {
@@ -999,9 +1033,11 @@ const ComparisonDotPlot = ({ strategies }) => {
                 <g key={strat.id}>
                   {si > 0 && <line x1={LEFT_PAD + si * colWidth} y1={chartTop} x2={LEFT_PAD + si * colWidth} y2={chartBottom} stroke="rgba(0,0,0,0.06)" strokeWidth="1" />}
 
-                  {/* Name label */}
-                  <text x={cx} y={chartBottom + 18} fill={c.main} fontFamily={MONO} fontSize="11" fontWeight="700" textAnchor="middle">
-                    {strat.name}
+                  {/* Name label — wrapped to fit the column */}
+                  <text x={cx} y={chartBottom + NAME_BLOCK_TOP} fill={c.main} fontFamily={MONO} fontSize={NAME_FS} fontWeight="700" textAnchor="middle">
+                    {wrappedNames[si].map((ln, li) => (
+                      <tspan key={li} x={cx} dy={li === 0 ? 0 : NAME_LINE_H}>{ln}</tspan>
+                    ))}
                   </text>
 
                   {/* Whisker P25→P95 */}
@@ -1047,8 +1083,8 @@ const ComparisonDotPlot = ({ strategies }) => {
                 { label: 'Entry Ownership', get: (s) => s.entryOwn },
                 { label: '# of Portcos', get: (s) => s.portfolioSize },
               ];
-              const baseY = chartBottom + 32;
-              const lineH = 13;
+              const baseY = chartBottom + detailsTop;
+              const lineH = DETAIL_LINE_H;
               return (
                 <g>
                   {/* Section label — left side, vertically centered */}
@@ -1168,9 +1204,30 @@ const ComparisonMetrics = ({ strategies }) => {
 };
 
 // ─── Main App ─────────────────────────────────────────────────────
+// ─── Page routing (hash-based, so each view is its own shareable URL) ──────────
+const TAB_TO_HASH = { home: '#/', entry: '#/strategies', comparison: '#/compare', about: '#/about' };
+const HASH_TO_TAB = {
+  '': 'home', '#': 'home', '#/': 'home',
+  '#/strategies': 'entry', '#/compare': 'comparison', '#/about': 'about',
+};
+function tabFromHash() { return HASH_TO_TAB[window.location.hash] || 'home'; }
+
 const App = () => {
   const mobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'entry' | 'comparison'
+  const [activeTab, setActiveTab] = useState(tabFromHash); // 'home' | 'entry' | 'comparison' | 'about'
+
+  // Keep the active page in sync with the URL hash so Home / Individual Strategies /
+  // Strategy Comparison are separate, bookmarkable, shareable pages.
+  const navigate = useCallback((tab) => {
+    const hash = TAB_TO_HASH[tab] || '#/';
+    if (window.location.hash !== hash) window.location.hash = hash;
+    setActiveTab(tab);
+  }, []);
+  useEffect(() => {
+    const onHash = () => setActiveTab(tabFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   const [entryPanel, setEntryPanel] = useState('strategy'); // 'strategy' | 'variables' | 'results'
 
   // ── Working config (the one being edited) ──
@@ -1438,13 +1495,17 @@ const App = () => {
     }
   }, [savedStrategies, marketScenario, activeStrategyId]);
 
-  // ── Auto-run simulations on first comparison tab visit ──
+  // ── Ensure fund returns are present on every fresh load ──
+  // Shared links carry only configs (no results), so on any fresh load we run every
+  // strategy that is missing results — that way the comparison always shows returns,
+  // regardless of which page the link opened on or which tab is active.
   React.useEffect(() => {
-    if (activeTab === 'comparison' && !comparisonInitialized.current && savedStrategies.length > 0) {
+    if (comparisonInitialized.current) return;
+    if (savedStrategies.length > 0 && savedStrategies.some((s) => !s.results)) {
       comparisonInitialized.current = true;
       runAllSimulations();
     }
-  }, [activeTab, savedStrategies, runAllSimulations]);
+  }, [savedStrategies, runAllSimulations]);
 
   // ── Share ──
   const [shareCopied, setShareCopied] = useState(false);
@@ -1456,7 +1517,8 @@ const App = () => {
       numIterations,
     };
     const encoded = encodeShareData(data);
-    const url = `${window.location.origin}${window.location.pathname}?s=${encoded}${window.location.hash}`;
+    // Land recipients directly on the comparison page (not the home page).
+    const url = `${window.location.origin}${window.location.pathname}?s=${encoded}${TAB_TO_HASH.comparison}`;
     navigator.clipboard.writeText(url).then(() => {
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
@@ -1500,19 +1562,19 @@ const App = () => {
             )}
           </span>
         </div>
-        <button className={`top-tab ${activeTab === 'home' ? 'active' : ''}`} onClick={() => setActiveTab('home')}>
+        <button className={`top-tab ${activeTab === 'home' ? 'active' : ''}`} onClick={() => navigate('home')}>
           Home
         </button>
         <button className={`top-tab ${activeTab === 'entry' ? 'active' : ''}`} onClick={() => {
-          setActiveTab('entry');
+          navigate('entry');
           if (activeStrategyId == null && savedStrategies.length > 0) loadStrategy(savedStrategies[0]);
         }}>
           {mobile ? 'Individual' : 'Individual Strategies'}
         </button>
-        <button className={`top-tab ${activeTab === 'comparison' ? 'active' : ''}`} onClick={() => setActiveTab('comparison')}>
+        <button className={`top-tab ${activeTab === 'comparison' ? 'active' : ''}`} onClick={() => navigate('comparison')}>
           {mobile ? 'Compare' : 'Strategy Comparison'}
         </button>
-        <button className={`top-tab ${activeTab === 'about' ? 'active' : ''}`} onClick={() => setActiveTab('about')}>
+        <button className={`top-tab ${activeTab === 'about' ? 'active' : ''}`} onClick={() => navigate('about')}>
           About
         </button>
         {!mobile && <div style={{ flex: 1 }} />}
@@ -1552,7 +1614,7 @@ const App = () => {
                   VC firms have a lot to consider when they invest their funds. Portfolio size, entry ownership, follow-on reserves, and other strategic decisions have huge impacts on expected returns.
                 </p>
                 <div style={{ marginTop: '32px', display: 'flex', gap: '12px' }}>
-                  <button className="btn" onClick={() => setActiveTab('entry')} style={{ width: 'auto', padding: '12px 28px' }}>
+                  <button className="btn" onClick={() => navigate('entry')} style={{ width: 'auto', padding: '12px 28px' }}>
                     Start Simulating
                   </button>
                 </div>

@@ -13,16 +13,6 @@ const ParameterControls: React.FC<ParameterControlsProps> = ({ config, onChange 
     onChange({ ...config, [field]: value });
   };
 
-  const handleCheckSizeChange = (stage: string, value: number) => {
-    const newCheckSizes = { ...config.check_sizes_at_entry, [stage]: value };
-    onChange({ ...config, check_sizes_at_entry: newCheckSizes });
-  };
-
-  const handleOwnershipChange = (stage: string, value: number) => {
-    const newOwnership = { ...config.ownership_percentages_at_entry, [stage]: value };
-    onChange({ ...config, ownership_percentages_at_entry: newOwnership });
-  };
-
   return (
     <div className="space-y-6">
       {/* Fund Parameters */}

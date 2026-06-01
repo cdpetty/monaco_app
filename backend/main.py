@@ -350,23 +350,23 @@ async def run_simulation(request: SimulationRequest) -> Dict[str, Any]:
         if not result:
             raise HTTPException(status_code=400, detail="Simulation failed")
 
-        # Compute TVPI distribution from MOIC distribution
-        # MOIC = portfolio_value / adjusted_fund_size
-        # TVPI = portfolio_value / committed_capital
-        # TVPI = MOIC * adjusted_fund_size / committed_capital
-        moic_outcomes = result.get("moic_outcomes", [])
+        # MOIC is always measured against the COMMITTED fund size, independent of how much
+        # capital was recycled or spent on fees. The engine returns value/adjusted_fund_size
+        # (capital actually deployed), so rescale every MOIC figure to value/committed_capital.
         adjusted_fund_size = config_dict["fund_size"]
         committed_capital = config_dict["committed_capital"]
-        tvpi_factor = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
-        tvpi_outcomes = [m * tvpi_factor for m in moic_outcomes]
+        to_committed = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
+        moic_outcomes = [m * to_committed for m in result.get("moic_outcomes", [])]
+        # TVPI is the same committed-basis multiple.
+        tvpi_outcomes = moic_outcomes
 
         # Transform backend result format to frontend format
         transformed_results = {
-            "mean_moic": result.get("total_MOIC", 0),
-            "median_moic": result.get("50th_percentile", 0),
-            "p25_moic": result.get("25th_percentile", 0),
-            "p75_moic": result.get("75th_percentile", 0),
-            "p90_moic": result.get("90th_percentile", 0),
+            "mean_moic": result.get("total_MOIC", 0) * to_committed,
+            "median_moic": result.get("50th_percentile", 0) * to_committed,
+            "p25_moic": result.get("25th_percentile", 0) * to_committed,
+            "p75_moic": result.get("75th_percentile", 0) * to_committed,
+            "p90_moic": result.get("90th_percentile", 0) * to_committed,
             "std_moic": 0,  # Not calculated in backend yet
             "num_simulations": config_dict["num_scenarios"],
             "avg_total_companies": result.get("avg_portfolio_size", 0),
@@ -422,20 +422,21 @@ async def run_multiple_simulations(request: MultipleSimulationRequest) -> Dict[s
             # Run simulation
             result = experiment.run_montecarlo(config)
             if result:
-                # Compute TVPI distribution
-                moic_outcomes = result.get("moic_outcomes", [])
+                # MOIC is always measured against the COMMITTED fund size (independent of fees /
+                # recycling). The engine returns value/adjusted_fund_size, so rescale to committed.
                 adjusted_fund_size = config_dict["fund_size"]
                 committed_capital = config_dict["committed_capital"]
-                tvpi_factor = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
-                tvpi_outcomes = [m * tvpi_factor for m in moic_outcomes]
+                to_committed = adjusted_fund_size / committed_capital if committed_capital > 0 else 1
+                moic_outcomes = [m * to_committed for m in result.get("moic_outcomes", [])]
+                tvpi_outcomes = moic_outcomes
 
                 # Transform backend result format to frontend format
                 transformed_results = {
-                    "mean_moic": result.get("total_MOIC", 0),
-                    "median_moic": result.get("50th_percentile", 0),
-                    "p25_moic": result.get("25th_percentile", 0),
-                    "p75_moic": result.get("75th_percentile", 0),
-                    "p90_moic": result.get("90th_percentile", 0),
+                    "mean_moic": result.get("total_MOIC", 0) * to_committed,
+                    "median_moic": result.get("50th_percentile", 0) * to_committed,
+                    "p25_moic": result.get("25th_percentile", 0) * to_committed,
+                    "p75_moic": result.get("75th_percentile", 0) * to_committed,
+                    "p90_moic": result.get("90th_percentile", 0) * to_committed,
                     "std_moic": 0,  # Not calculated in backend yet
                     "num_simulations": config_dict["num_scenarios"],
                     "avg_total_companies": result.get("avg_portfolio_size", 0),
