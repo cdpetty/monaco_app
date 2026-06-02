@@ -211,12 +211,14 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
 // app's valuations (Pre-seed $15M, Seed $30M) so entry ownership matches the label:
 // Index 2.5% (PS $0.375M / Seed $0.75M), Spray/Machine 5% (PS $0.75M / Seed $1.5M),
 // Lead 15% (PS $2.25M / Seed $4.5M). PS + Seed split 50/50.
+// pro-rata cap = $2B, so reserves follow winners through later rounds (up to Series E)
+// instead of being reinvested as new pre-seed checks.
 const fundStrategies = (fund) => [
-  { name: '2.5% INDEX',         config: presetCfg(fund, 0,  150, [{ stage: 'Pre-seed', pct: 50, check_size: 0.375 }, { stage: 'Seed', pct: 50, check_size: 0.75 }]) },
-  { name: '5% SPRAY',           config: presetCfg(fund, 0,  150, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
-  { name: 'FOLLOW-ON MACHINE',  config: presetCfg(fund, 50, 150, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
-  { name: 'LEAD, LIGHT',        config: presetCfg(fund, 25, 150, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
-  { name: 'LEAD + DOUBLE DOWN', config: presetCfg(fund, 50, 150, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
+  { name: '2.5% INDEX',         config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.375 }, { stage: 'Seed', pct: 50, check_size: 0.75 }]) },
+  { name: '5% SPRAY',           config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
+  { name: 'FOLLOW-ON MACHINE',  config: presetCfg(fund, 50, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
+  { name: 'LEAD, LIGHT',        config: presetCfg(fund, 25, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
+  { name: 'LEAD + DOUBLE DOWN', config: presetCfg(fund, 50, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
 ];
 
 const PRESETS = {
