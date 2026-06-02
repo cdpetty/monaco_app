@@ -216,7 +216,7 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
 const fundStrategies = (fund) => [
   { name: '2.5% Ownership',             config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.375 }, { stage: 'Seed', pct: 50, check_size: 0.75 }]) },
   { name: '5% Ownership One-Time',      config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
-  { name: '5% Ownership & Double Down', config: presetCfg(fund, 50, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
+  { name: '5% Ownership & Double Down', config: presetCfg(fund, 25, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
   { name: 'Lead with 25% Reserves',     config: presetCfg(fund, 25, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
   { name: 'Lead with 50% Reserves',     config: presetCfg(fund, 50, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
 ];
