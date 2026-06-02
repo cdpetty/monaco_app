@@ -1012,8 +1012,9 @@ const ComparisonDotPlot = ({ strategies }) => {
     .filter(Boolean);
 
   const hasData = withResults.length > 0;
-  const allMax = hasData ? Math.max(...withResults.map((d) => d.p95)) : 10;
-  const { ticks, axisMax } = generateTicks(allMax * 1.1);
+  // Fixed 0–12x axis; anything above 12x is clamped and labelled "12x+".
+  const axisMax = 12;
+  const ticks = [0, 2, 4, 6, 8, 10, 12];
 
   const VW = 700;
   const LEFT_PAD = 100;
@@ -1040,6 +1041,7 @@ const ComparisonDotPlot = ({ strategies }) => {
   const chartBottom = chartTop + chartH;
   const VH = chartBottom + BOTTOM_LABEL;
   const toY = (val) => chartBottom - (chartH * val) / axisMax;
+  const clampV = (v) => Math.min(v, axisMax);
 
   const handleDotEnter = (e, strat, pKey) => {
     const bKey = PERCENTILE_TO_BREAKDOWN[pKey];
@@ -1103,17 +1105,17 @@ const ComparisonDotPlot = ({ strategies }) => {
                   </text>
 
                   {/* Whisker P25→P95 */}
-                  <line x1={cx} y1={toY(strat.p95)} x2={cx} y2={toY(strat.p25)} stroke={c.dim} strokeWidth="1.5" />
+                  <line x1={cx} y1={toY(clampV(strat.p95))} x2={cx} y2={toY(clampV(strat.p25))} stroke={c.dim} strokeWidth="1.5" />
 
                   {/* Box P75→P90 */}
-                  <rect x={cx - 14} y={toY(strat.p90)} width={28}
-                    height={Math.max(toY(strat.p75) - toY(strat.p90), 1)}
+                  <rect x={cx - 14} y={toY(clampV(strat.p90))} width={28}
+                    height={Math.max(toY(clampV(strat.p75)) - toY(clampV(strat.p90)), 1)}
                     fill={c.bg} stroke={c.dim} strokeWidth="1" rx="2" />
 
                   {/* Dots with hover zones */}
                   {PERCENTILE_KEYS.map((p) => {
                     const val = vals[p.key];
-                    const y = toY(val);
+                    const y = toY(clampV(val));
                     const isMedian = p.key === 'median_moic';
                     const dotColor = p.color || c.dim;
                     return (
@@ -1122,7 +1124,7 @@ const ComparisonDotPlot = ({ strategies }) => {
                           fill={p.filled ? dotColor : 'var(--paper)'} stroke={dotColor} strokeWidth={p.filled ? 0 : 1.5} />
                         <text x={cx + 10} y={y + 3} fill={dotColor} fontFamily={MONO} fontSize="8"
                           fontWeight={p.filled ? '700' : '400'} textAnchor="start">
-                          {val.toFixed(1)}x
+                          {val > axisMax ? `${axisMax}x+` : `${val.toFixed(1)}x`}
                         </text>
                         {/* Invisible larger hit area for hover */}
                         <circle cx={cx} cy={y} r={12} fill="transparent" style={{ cursor: 'pointer' }}
