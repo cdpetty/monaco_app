@@ -263,7 +263,10 @@ def convert_frontend_config_to_backend(sim_config: SimulationConfig) -> Dict[str
     fund_size = committed_capital - total_fees + recycled_capital
 
     # Calculate follow-on reserve
-    dry_powder_pct = (sim_config.dry_powder_reserve_for_pro_rata or 30) / 100
+    # Use an explicit None check: a configured 0% reserve must stay 0%
+    # (0 or 30 == 30 in Python would silently turn "no reserve" into 30%).
+    dry_powder_pct = (sim_config.dry_powder_reserve_for_pro_rata
+                      if sim_config.dry_powder_reserve_for_pro_rata is not None else 30) / 100
     follow_on_reserve = fund_size * dry_powder_pct
 
     # Calculate total primary investment (must equal fund_size - follow_on_reserve)
