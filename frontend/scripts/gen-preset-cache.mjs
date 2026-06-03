@@ -32,26 +32,24 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
 });
 
 // Checks = ownership × stage valuations (Pre-seed $15M, Seed $30M) so each tier is
-// exactly 2.5/5/10% at both stages. Must match OWNERSHIP_TIERS in App.jsx.
-const OWNERSHIP_TIERS = [
-  { label: '2.5%', ps: 0.375, seed: 0.75 },
-  { label: '5%',   ps: 0.75,  seed: 1.5 },
-  { label: '10%',  ps: 1.5,   seed: 3.0 },
+// exactly its labelled ownership at both stages. Must match STRATEGY_TIERS in App.jsx.
+const STRATEGY_TIERS = [
+  { own: '2.5%', ps: 0.375, seed: 0.75, reserve: 25 },
+  { own: '5%',   ps: 0.75,  seed: 1.5,  reserve: 30 },
+  { own: '10%',  ps: 1.5,   seed: 3.0,  reserve: 40 },
+  { own: '15%',  ps: 2.25,  seed: 4.5,  reserve: 40 },
 ];
-const RESERVE_TIERS = [25, 50];
 
 const fundStrategies = (fund, allocation) =>
-  OWNERSHIP_TIERS.flatMap((own, oi) =>
-    RESERVE_TIERS.map((reserve, ri) => ({
-      name: `#${oi * RESERVE_TIERS.length + ri + 1} ${own.label} Ownership / ${reserve}% Reserve`,
-      config: presetCfg(fund, reserve, 2000, allocation(own)),
-    }))
-  );
+  STRATEGY_TIERS.map((t, i) => ({
+    name: `#${i + 1} ${t.own} Ownership / ${t.reserve}% Reserve`,
+    config: presetCfg(fund, t.reserve, 2000, allocation(t)),
+  }));
 
-const preseedOnly     = (own) => [{ stage: 'Pre-seed', pct: 100, check_size: own.ps }];
-const preseedSeed6040 = (own) => [
-  { stage: 'Pre-seed', pct: 60, check_size: own.ps },
-  { stage: 'Seed',     pct: 40, check_size: own.seed },
+const preseedOnly     = (t) => [{ stage: 'Pre-seed', pct: 100, check_size: t.ps }];
+const preseedSeed6040 = (t) => [
+  { stage: 'Pre-seed', pct: 60, check_size: t.ps },
+  { stage: 'Seed',     pct: 40, check_size: t.seed },
 ];
 
 const PRESETS = {
