@@ -208,15 +208,16 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
 });
 
 // Six strategies per fund size — a 3×2 grid of entry ownership × reserve:
-//   ownership = 2.5% / 5% / 10% of post-money  (Pre-seed $10M post, Seed $25M post),
-//   reserve   = 25% / 50% of the fund held for pro-rata.
-// So 2.5% is a $0.25M PS / $0.625M Seed check, 5% is $0.5M / $1.25M, 10% is $1.0M / $2.5M.
-// All carry 20% recycling (set in presetCfg). pro-rata cap = $2B, so reserves follow
-// winners through later rounds instead of being reinvested as new pre-seed checks.
+//   ownership = 2.5% / 5% / 10% at BOTH stages, reserve = 25% / 50% of the fund.
+// Checks = ownership × the app's stage valuations (Pre-seed $15M, Seed $30M), so each
+// tier lands on exactly 2.5/5/10% at pre-seed AND seed: 2.5% is $0.375M PS / $0.75M Seed,
+// 5% is $0.75M / $1.5M, 10% is $1.5M / $3.0M. All carry 20% recycling (set in presetCfg).
+// pro-rata cap = $2B, so reserves follow winners through later rounds instead of being
+// reinvested as new pre-seed checks.
 const OWNERSHIP_TIERS = [
-  { label: '2.5%', ps: 0.25, seed: 0.625 },
-  { label: '5%',   ps: 0.5,  seed: 1.25 },
-  { label: '10%',  ps: 1.0,  seed: 2.5 },
+  { label: '2.5%', ps: 0.375, seed: 0.75 },
+  { label: '5%',   ps: 0.75,  seed: 1.5 },
+  { label: '10%',  ps: 1.5,   seed: 3.0 },
 ];
 const RESERVE_TIERS = [25, 50];
 

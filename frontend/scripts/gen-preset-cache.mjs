@@ -31,10 +31,12 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
   stage_allocations,
 });
 
+// Checks = ownership × stage valuations (Pre-seed $15M, Seed $30M) so each tier is
+// exactly 2.5/5/10% at both stages. Must match OWNERSHIP_TIERS in App.jsx.
 const OWNERSHIP_TIERS = [
-  { label: '2.5%', ps: 0.25, seed: 0.625 },
-  { label: '5%',   ps: 0.5,  seed: 1.25 },
-  { label: '10%',  ps: 1.0,  seed: 2.5 },
+  { label: '2.5%', ps: 0.375, seed: 0.75 },
+  { label: '5%',   ps: 0.75,  seed: 1.5 },
+  { label: '10%',  ps: 1.5,   seed: 3.0 },
 ];
 const RESERVE_TIERS = [25, 50];
 
