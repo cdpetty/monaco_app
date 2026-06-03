@@ -207,27 +207,42 @@ const presetCfg = (fund_size_m, reserve, pro_rata, stage_allocations) => ({
   stage_allocations,
 });
 
-// The same five strategies are offered at every fund size. Checks are sized to the
-// app's valuations (Pre-seed $15M, Seed $30M) so entry ownership matches the label:
-// Index 2.5% (PS $0.375M / Seed $0.75M), Spray/Machine 5% (PS $0.75M / Seed $1.5M),
-// Lead 15% (PS $2.25M / Seed $4.5M). PS + Seed split 50/50.
-// pro-rata cap = $2B, so reserves follow winners through later rounds (up to Series E)
-// instead of being reinvested as new pre-seed checks.
-const fundStrategies = (fund) => [
-  { name: '#1 2.5% Ownership',             config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.375 }, { stage: 'Seed', pct: 50, check_size: 0.75 }]) },
-  { name: '#2 5% Ownership One-Time',      config: presetCfg(fund, 0,  2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
-  { name: '#3 5% Ownership & Double Down', config: presetCfg(fund, 25, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 0.75 },  { stage: 'Seed', pct: 50, check_size: 1.5 }]) },
-  { name: '#4 Lead with 25% Reserves',     config: presetCfg(fund, 25, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
-  { name: '#5 Lead with 50% Reserves',     config: presetCfg(fund, 50, 2000, [{ stage: 'Pre-seed', pct: 50, check_size: 2.25 },  { stage: 'Seed', pct: 50, check_size: 4.5 }]) },
+// Six strategies per fund size — a 3×2 grid of entry ownership × reserve:
+//   ownership = 2.5% / 5% / 10% of post-money  (Pre-seed $10M post, Seed $25M post),
+//   reserve   = 25% / 50% of the fund held for pro-rata.
+// So 2.5% is a $0.25M PS / $0.625M Seed check, 5% is $0.5M / $1.25M, 10% is $1.0M / $2.5M.
+// All carry 20% recycling (set in presetCfg). pro-rata cap = $2B, so reserves follow
+// winners through later rounds instead of being reinvested as new pre-seed checks.
+const OWNERSHIP_TIERS = [
+  { label: '2.5%', ps: 0.25, seed: 0.625 },
+  { label: '5%',   ps: 0.5,  seed: 1.25 },
+  { label: '10%',  ps: 1.0,  seed: 2.5 },
+];
+const RESERVE_TIERS = [25, 50];
+
+// `allocation(tier)` returns the stage_allocations for that ownership tier, so a fund
+// can be pre-seed only ($20M) or Pre-seed + Seed 60/40 ($100M, $200M).
+const fundStrategies = (fund, allocation) =>
+  OWNERSHIP_TIERS.flatMap((own, oi) =>
+    RESERVE_TIERS.map((reserve, ri) => ({
+      name: `#${oi * RESERVE_TIERS.length + ri + 1} ${own.label} Ownership / ${reserve}% Reserve`,
+      config: presetCfg(fund, reserve, 2000, allocation(own)),
+    }))
+  );
+
+const preseedOnly     = (own) => [{ stage: 'Pre-seed', pct: 100, check_size: own.ps }];
+const preseedSeed6040 = (own) => [
+  { stage: 'Pre-seed', pct: 60, check_size: own.ps },
+  { stage: 'Seed',     pct: 40, check_size: own.seed },
 ];
 
 const PRESETS = {
-  '30m': fundStrategies(30),
-  '100m': fundStrategies(100),
-  '200m': fundStrategies(200),
+  '20m':  fundStrategies(20,  preseedOnly),
+  '100m': fundStrategies(100, preseedSeed6040),
+  '200m': fundStrategies(200, preseedSeed6040),
 };
 
-// Normalize "?preset=$30M" / "30m" / "400" -> a PRESETS key.
+// Normalize "?preset=$20M" / "20m" / "200" -> a PRESETS key.
 function getPresetParam() {
   try {
     const raw = new URLSearchParams(window.location.search).get('preset');
@@ -1462,7 +1477,14 @@ const App = () => {
   // ── Create new strategy (clones current config) ──
   const createNewStrategy = useCallback(() => {
     if (savedStrategies.length >= MAX_STRATEGIES) return;
-    const code = strategyCode(savedStrategies.length);
+    // Pick the lowest unused code letter — deriving it from the count breaks after
+    // a middle strategy is deleted (the new code collides with an existing one).
+    const usedCodes = new Set(savedStrategies.map((s) => s.code));
+    let code = strategyCode(savedStrategies.length);
+    for (let i = 0; i < MAX_STRATEGIES; i++) {
+      const candidate = strategyCode(i);
+      if (!usedCodes.has(candidate)) { code = candidate; break; }
+    }
     const newStrategy = {
       id: nextStrategyId++,
       name: `STRATEGY ${code}`,
