@@ -222,7 +222,7 @@ const OWNERSHIP_TIERS = [
 const RESERVE_TIERS = [25, 50];
 
 // `allocation(tier)` returns the stage_allocations for that ownership tier, so a fund
-// can be pre-seed only ($20M) or Pre-seed + Seed 60/40 ($100M, $200M).
+// can be pre-seed only ($30M) or Pre-seed + Seed 60/40 ($100M, $200M).
 const fundStrategies = (fund, allocation) =>
   OWNERSHIP_TIERS.flatMap((own, oi) =>
     RESERVE_TIERS.map((reserve, ri) => ({
@@ -238,12 +238,12 @@ const preseedSeed6040 = (own) => [
 ];
 
 const PRESETS = {
-  '20m':  fundStrategies(20,  preseedOnly),
+  '30m':  fundStrategies(30,  preseedOnly),
   '100m': fundStrategies(100, preseedSeed6040),
   '200m': fundStrategies(200, preseedSeed6040),
 };
 
-// Normalize "?preset=$20M" / "20m" / "200" -> a PRESETS key (or null if unknown).
+// Normalize "?preset=$30M" / "30m" / "200" -> a PRESETS key (or null if unknown).
 function getPresetKey() {
   try {
     const raw = new URLSearchParams(window.location.search).get('preset');

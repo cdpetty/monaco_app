@@ -55,7 +55,7 @@ const preseedSeed6040 = (own) => [
 ];
 
 const PRESETS = {
-  '20m':  fundStrategies(20,  preseedOnly),
+  '30m':  fundStrategies(30,  preseedOnly),
   '100m': fundStrategies(100, preseedSeed6040),
   '200m': fundStrategies(200, preseedSeed6040),
 };
