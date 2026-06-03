@@ -242,21 +242,25 @@ const PRESETS = {
   '200m': fundStrategies(200, preseedSeed6040),
 };
 
-// Normalize "?preset=$20M" / "20m" / "200" -> a PRESETS key.
-function getPresetParam() {
+// Normalize "?preset=$20M" / "20m" / "200" -> a PRESETS key (or null if unknown).
+function getPresetKey() {
   try {
     const raw = new URLSearchParams(window.location.search).get('preset');
     if (!raw) return null;
     let key = raw.toLowerCase().replace(/[^0-9a-z]/g, '');
     if (!/m$/.test(key)) key += 'm';
-    return PRESETS[key] || null;
+    return PRESETS[key] ? key : null;
   } catch (e) { return null; }
 }
+// Captured once at module load — before any render strips ?preset= from the URL —
+// so routing, market scenario, and the cached-results loader all agree on the key.
+const INITIAL_PRESET_KEY = (typeof window !== 'undefined') ? getPresetKey() : null;
 
 function loadSavedStrategies() {
-  // A named preset (?preset=30m) takes precedence over everything else.
-  const preset = getPresetParam();
-  if (preset) {
+  // A named preset (?preset=20m) takes precedence over everything else. Cached
+  // results (if any) are attached later by an effect; here we just seed the configs.
+  if (INITIAL_PRESET_KEY) {
+    const preset = PRESETS[INITIAL_PRESET_KEY];
     const strategies = preset.map((s, i) => ({
       id: i + 1,
       name: s.name,
@@ -266,7 +270,8 @@ function loadSavedStrategies() {
       stale: false,
     }));
     nextStrategyId = strategies.length + 1;
-    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    // Drop ?preset= and land on the comparison page (presets carry no hash).
+    window.history.replaceState({}, '', window.location.pathname + '#/compare');
     return strategies;
   }
   // Check for shared URL first
@@ -1291,10 +1296,12 @@ const HASH_TO_TAB = {
   '#/strategies': 'entry', '#/compare': 'comparison', '#/about': 'about',
 };
 function tabFromHash() { return HASH_TO_TAB[window.location.hash] || 'home'; }
+// ?preset=… links carry no hash → open them straight on the comparison page.
+function initialTab() { return INITIAL_PRESET_KEY ? 'comparison' : tabFromHash(); }
 
 const App = () => {
   const mobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState(tabFromHash); // 'home' | 'entry' | 'comparison' | 'about'
+  const [activeTab, setActiveTab] = useState(initialTab); // 'home' | 'entry' | 'comparison' | 'about'
 
   // Keep the active page in sync with the URL hash so Home / Individual Strategies /
   // Strategy Comparison are separate, bookmarkable, shareable pages.
@@ -1316,6 +1323,7 @@ const App = () => {
 
   // ── Global State ──
   const [marketScenario, setMarketScenario] = useState(() => {
+    if (INITIAL_PRESET_KEY) return 'MARKET'; // cached preset results are the MARKET run
     const shared = getShareParam();
     if (shared?.marketScenario) return shared.marketScenario;
     try { const g = JSON.parse(localStorage.getItem('monaco_globals')); return g?.marketScenario || 'MARKET'; } catch (e) { return 'MARKET'; }
@@ -1541,6 +1549,7 @@ const App = () => {
   const COMPARISON_ITERATIONS = 7000;
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const comparisonInitialized = React.useRef(false);
+  const presetCacheLoaded = React.useRef(false);
 
   const runAllSimulations = useCallback(async () => {
     const strategiesToRun = savedStrategies.filter((s) => s.config);
@@ -1581,6 +1590,33 @@ const App = () => {
       setComparisonLoading(false);
     }
   }, [savedStrategies, marketScenario, activeStrategyId]);
+
+  // ── Preset links: load pre-computed results so the comparison shows instantly ──
+  // A ?preset= link seeds configs with no results; instead of running the sim live
+  // (6 strategies × 7000 iters), fetch the cached MARKET run from /preset-results.json.
+  // Users can still hit "RUN ALL SIMULATIONS" to recompute. Falls back to a live run if
+  // the cache is missing/stale. Runs before the generic auto-run effect below and sets
+  // comparisonInitialized so that one doesn't also fire.
+  React.useEffect(() => {
+    if (presetCacheLoaded.current || !INITIAL_PRESET_KEY) return;
+    presetCacheLoaded.current = true;
+    comparisonInitialized.current = true; // suppress the generic missing-results auto-run
+    const base = import.meta.env.BASE_URL || '/';
+    fetch(`${base}preset-results.json`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('no cache'))))
+      .then((all) => {
+        const cached = all[INITIAL_PRESET_KEY];
+        if (!Array.isArray(cached)) throw new Error(`no cached results for ${INITIAL_PRESET_KEY}`);
+        setSavedStrategies((prev) => prev.map((s, i) => {
+          const c = cached[i];
+          if (!c) return s;
+          // The backend returns tvpi_distribution === moic_distribution; the cache stores
+          // only one copy, so reconstruct the other for the charts that read it.
+          return { ...s, results: { ...c, tvpi_distribution: c.moic_distribution }, stale: false };
+        }));
+      })
+      .catch(() => { runAllSimulations(); }); // cache unavailable → compute live
+  }, [runAllSimulations]);
 
   // ── Ensure fund returns are present on every fresh load ──
   // Shared links carry only configs (no results), so on any fresh load we run every
