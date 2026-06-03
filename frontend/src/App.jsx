@@ -2363,39 +2363,6 @@ const App = () => {
               <li>The base market case is built on market data from <a href="https://carta.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>Carta</a> (<a href="https://www.linkedin.com/posts/peterjameswalker_seed-to-series-a-graduation-rate-activity-7292256120423755777-bu8o?utm_source=share&utm_medium=member_desktop&rcm=ACoAABafbR8BDcy1wnDzXevSXgZAK-jqfPLKZVM" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', fontWeight: 600 }}>this post</a>) and other sources that document historical graduation rates of companies from stage to stage.</li>
               <li>You can tweak market assumptions if you are interested.</li>
             </ol>
-
-            <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
-
-            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Source Code</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '12px' }}>
-              GitHub
-            </h2>
-            <p style={{ fontSize: mobile ? '15px' : '17.5px', color: '#666', lineHeight: 1.7, marginBottom: '16px' }}>
-              Monaco Fund Simulator is open source. However, please be kind as much of the actual data science work was done in Hex and then Claude did the hard (and at times, sloppy) work of building the app.
-            </p>
-            <a href="https://github.com/monaco-app" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '10px 20px', border: '1px solid var(--ink)', fontFamily: MONO, fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink)', textDecoration: 'none', fontWeight: 600 }}>
-              View on GitHub
-            </a>
-
-            <div style={{ height: '1px', background: 'var(--ink)', margin: '40px 0' }} />
-
-            <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 600 }}>Further Reading</span>
-            <h2 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: mobile ? '26px' : '35px', fontWeight: 600, textTransform: 'uppercase', marginTop: '8px', marginBottom: '20px' }}>
-              Other Great Writing About Fund Economics
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {[
-                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
-                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
-                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
-                { title: 'Placeholder Article Title', source: 'Source Name', url: '#' },
-              ].map((article, i) => (
-                <a key={i} href={article.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: mobile ? 'flex-start' : 'center', padding: '14px', border: '1px solid var(--ink)', textDecoration: 'none', color: 'var(--ink)', transition: 'background 0.15s', gap: mobile ? '4px' : undefined }}>
-                  <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: '19px', fontWeight: 600 }}>{article.title}</span>
-                  <span style={{ fontFamily: MONO, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#999' }}>{article.source}</span>
-                </a>
-              ))}
-            </div>
           </section>
         </div>
       )}
