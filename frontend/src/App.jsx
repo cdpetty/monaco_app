@@ -1599,7 +1599,11 @@ const App = () => {
     presetCacheLoaded.current = true;
     comparisonInitialized.current = true; // suppress the generic missing-results auto-run
     const base = import.meta.env.BASE_URL || '/';
-    fetch(`${base}preset-results.json`)
+    // `no-cache` forces the browser to revalidate with the server (cheap 304 when
+    // unchanged) instead of serving a stale copy — the file keeps the same name across
+    // deploys, so without this an old cache could be used and the preset would fall back
+    // to a slow live run (most noticeable on the $200M fund, ~25s to compute live).
+    fetch(`${base}preset-results.json`, { cache: 'no-cache' })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('no cache'))))
       .then((all) => {
         const cached = all[INITIAL_PRESET_KEY];
